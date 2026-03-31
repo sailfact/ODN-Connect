@@ -35,8 +35,6 @@ if (process.contextIsolated) {
     console.error(err)
   }
 } else {
-  // @ts-ignore
-  window.electron = electronAPI
-  // @ts-ignore
-  window.api = api
+  ;(window as Record<string, unknown>).electron = electronAPI
+  ;(window as Record<string, unknown>).api = api
 }
