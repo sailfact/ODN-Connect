@@ -1,3 +1,17 @@
+/**
+ * WireGuard CLI integration layer.
+ *
+ * This module wraps the WireGuard Windows binaries (wg.exe and wireguard.exe)
+ * to provide tunnel management capabilities:
+ * - Connect/disconnect tunnels via Windows service installation
+ * - Query active interfaces and live peer statistics
+ * - Parse and import WireGuard .conf files
+ * - Generate key pairs for new configurations
+ *
+ * All operations require WireGuard to be installed at the default Windows path.
+ * Connect/disconnect operations require administrator privileges.
+ */
+
 import { execSync, exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs'
@@ -8,11 +22,18 @@ import type { Tunnel, WireGuardPeer, WireGuardInterface, WireGuardStatus } from 
 
 const execAsync = promisify(exec)
 
-// WireGuard for Windows installs to Program Files
+// Default WireGuard installation directory on Windows
 const WG_DIR = 'C:\\Program Files\\WireGuard'
+/** Path to wireguard.exe — used for installing/uninstalling tunnel services. */
 export const WG_EXE = path.join(WG_DIR, 'wireguard.exe')
+/** Path to wg.exe — used for querying interface status and generating keys. */
 export const WG_CLI = path.join(WG_DIR, 'wg.exe')
 
+/**
+ * Returns the directory where tunnel .conf files are stored.
+ * Creates the directory if it doesn't exist.
+ * Location: %APPDATA%\odn-client\tunnels\
+ */
 export function getConfigDir(): string {
   const dir = path.join(os.homedir(), 'AppData', 'Roaming', 'odn-client', 'tunnels')
   if (!fs.existsSync(dir)) {
@@ -21,6 +42,7 @@ export function getConfigDir(): string {
   return dir
 }
 
+/** Checks whether the WireGuard CLI (wg.exe) and service manager (wireguard.exe) exist on disk. */
 export function isWireGuardInstalled(): { wg: boolean; wgQuick: boolean } {
   return {
     wg: fs.existsSync(WG_CLI),
@@ -134,15 +156,22 @@ export function parseWgShowDump(): WireGuardInterface[] {
   }
 }
 
+/** Returns structured status data for all active WireGuard interfaces and their peers. */
 export function getWireGuardStatus(): WireGuardStatus {
   return { interfaces: parseWgShowDump() }
 }
 
+/**
+ * Parses a WireGuard .conf file (INI format) into structured tunnel data.
+ * Extracts the [Interface] section (address, DNS, listen port) and all [Peer] sections.
+ * Returns a partial Tunnel object; missing fields will be empty arrays/undefined.
+ */
 export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
   try {
     const content = fs.readFileSync(configPath, 'utf-8')
     const parsed = parseIni(content)
 
+    // Extract [Interface] section fields
     const iface = parsed['Interface'] || {}
     const address = iface['Address']
       ? String(iface['Address']).split(',').map((s: string) => s.trim())
@@ -152,6 +181,8 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
       : []
     const listenPort = iface['ListenPort'] ? parseInt(String(iface['ListenPort'])) : undefined
 
+    // Extract [Peer] sections — the ini parser returns a single object for one peer
+    // or an array for multiple peers, so we normalize to an array
     const peers: WireGuardPeer[] = []
     const rawPeers = parsed['Peer']
     if (rawPeers) {
@@ -177,6 +208,7 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
   }
 }
 
+/** Copies a WireGuard .conf file into the app's config directory, named by tunnel. */
 export function importConfigFile(sourcePath: string, tunnelName: string): string {
   const configDir = getConfigDir()
   const destPath = path.join(configDir, `${tunnelName}.conf`)
@@ -184,6 +216,7 @@ export function importConfigFile(sourcePath: string, tunnelName: string): string
   return destPath
 }
 
+/** Removes a tunnel's .conf file from disk. Silently succeeds if file is already gone. */
 export function deleteConfigFile(configPath: string): void {
   try {
     if (fs.existsSync(configPath)) {
@@ -211,6 +244,7 @@ export function generateKeyPair(): { privateKey: string; publicKey: string } | n
   }
 }
 
+/** Converts a byte count to a human-readable string (e.g., 1536 -> "1.5 KiB"). */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -219,6 +253,7 @@ export function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
+/** Converts a Unix timestamp to a relative time string (e.g., "2m ago", "Never"). */
 export function formatHandshake(timestamp?: number): string {
   if (!timestamp) return 'Never'
   const diff = Math.floor(Date.now() / 1000) - timestamp

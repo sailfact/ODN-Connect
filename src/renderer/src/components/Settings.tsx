@@ -1,3 +1,15 @@
+/**
+ * Settings view — configure ODN Connect behavior and preferences.
+ *
+ * Sections:
+ * - General: launch at startup, minimize to tray, notifications
+ * - WireGuard: info about admin privileges and installation
+ * - Appearance: theme selection (dark/light/system)
+ * - About: app info and config directory link
+ *
+ * Settings are saved to electron-store on the main process side.
+ */
+
 import { useState } from 'react'
 import type { AppSettings } from '../types'
 
@@ -6,6 +18,7 @@ interface SettingsProps {
   onSave: (s: AppSettings) => Promise<void>
 }
 
+/** Reusable toggle switch component with a label and optional description. */
 function Toggle({
   label,
   description,
@@ -39,6 +52,7 @@ function Toggle({
   )
 }
 
+/** Reusable dropdown select field with a label and optional description. */
 function SelectField({
   label,
   description,

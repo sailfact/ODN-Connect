@@ -1,3 +1,12 @@
+/**
+ * Tunnels view — full tunnel management interface.
+ *
+ * Allows users to import WireGuard .conf files, view all configured tunnels,
+ * expand peer details, connect/disconnect, and delete tunnels.
+ * Each tunnel row is expandable to show per-peer information (endpoint,
+ * allowed IPs, handshake times, transfer stats).
+ */
+
 import { useState } from 'react'
 import type { Tunnel } from '../types'
 
@@ -6,6 +15,7 @@ interface TunnelsProps {
   onRefresh: () => Promise<void>
 }
 
+/** Displays details for a single WireGuard peer within an expanded tunnel row. */
 function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
   return (
     <div className="border-t border-border/50 px-4 py-3 flex items-start gap-3">
@@ -56,6 +66,7 @@ function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
   )
 }
 
+/** A single tunnel row with expandable peer list, connect/disconnect, and delete actions. */
 function TunnelRow({
   tunnel,
   onConnect,

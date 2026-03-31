@@ -1,3 +1,12 @@
+/**
+ * Main process entry point for ODN Connect.
+ *
+ * Responsibilities:
+ * - Create and manage the BrowserWindow
+ * - Register IPC handlers that bridge the renderer to WireGuard CLI operations
+ * - Manage app lifecycle (tray, single-instance, close-to-tray)
+ */
+
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTray, updateTrayMenu } from './tray'
@@ -19,8 +28,14 @@ import type { Tunnel, AppSettings } from './types'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 
+/** Singleton reference to the main application window. */
 let mainWindow: BrowserWindow | null = null
 
+/**
+ * Creates the main application window with context-isolated preload script.
+ * The window starts hidden and shows itself once content is ready to avoid a white flash.
+ * If "minimize to tray" is enabled, closing the window hides it instead of quitting.
+ */
 function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 1000,
@@ -52,6 +67,7 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Open external links in the default browser instead of a new Electron window
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -68,22 +84,28 @@ function createWindow(): BrowserWindow {
 
 // ─── IPC Handlers ────────────────────────────────────────────────────────────
 
+/** Check whether WireGuard binaries (wg.exe, wireguard.exe) are present on disk. */
 ipcMain.handle('wg:installed', () => {
   return isWireGuardInstalled()
 })
 
+/** Return all stored tunnels with their live connection status from WireGuard. */
 ipcMain.handle('tunnels:list', () => {
   const tunnels = getTunnels()
   const active = getActiveInterfaces()
   return tunnels.map((t) => ({ ...t, connected: active.includes(t.name) }))
 })
 
+/**
+ * Return tunnels enriched with live WireGuard stats (peer transfer, handshake times).
+ * This is polled every 5 seconds from the renderer to keep the UI current.
+ */
 ipcMain.handle('tunnels:status', () => {
   const status = getWireGuardStatus()
   const tunnels = getTunnels()
   const active = getActiveInterfaces()
 
-  // Merge wg stats into tunnel data
+  // Merge live wg peer stats into stored tunnel data
   return tunnels.map((tunnel) => {
     const ifc = status.interfaces.find((i) => i.name === tunnel.name)
     return {
@@ -99,6 +121,7 @@ ipcMain.handle('tunnels:status', () => {
   })
 })
 
+/** Install a WireGuard tunnel as a Windows service and notify the user on success. */
 ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -124,6 +147,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   }
 })
 
+/** Uninstall a WireGuard tunnel service and notify the user on success. */
 ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -149,6 +173,10 @@ ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
   }
 })
 
+/**
+ * Open a file dialog for the user to pick a WireGuard .conf file.
+ * The config is copied into the app's data directory, parsed, and saved to the store.
+ */
 ipcMain.handle('tunnels:import', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Import WireGuard Config',
@@ -162,6 +190,7 @@ ipcMain.handle('tunnels:import', async () => {
 
   const sourcePath = result.filePaths[0]
   const baseName = path.basename(sourcePath, '.conf')
+  // Sanitize the filename to a safe tunnel/service name (alphanumeric, dash, underscore)
   const tunnelName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_')
 
   try {
@@ -187,6 +216,7 @@ ipcMain.handle('tunnels:import', async () => {
   }
 })
 
+/** Disconnect a tunnel (if active), remove its config file, and delete it from the store. */
 ipcMain.handle('tunnels:delete', async (_, tunnelId: string) => {
   const tunnels = getTunnels()
   const tunnel = tunnels.find((t) => t.id === tunnelId)
@@ -204,6 +234,7 @@ ipcMain.handle('tunnels:delete', async (_, tunnelId: string) => {
   return { success: true }
 })
 
+/** Generate a WireGuard key pair (private + public) via the wg CLI. */
 ipcMain.handle('tunnels:generate-keys', () => {
   return generateKeyPair()
 })
@@ -212,6 +243,7 @@ ipcMain.handle('settings:get', () => {
   return getSettings()
 })
 
+/** Persist settings and sync the OS login-item state with the launchAtStartup preference. */
 ipcMain.handle('settings:save', (_, settings: AppSettings) => {
   saveSettings(settings)
   app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup })
@@ -222,6 +254,7 @@ ipcMain.handle('app:version', () => {
   return app.getVersion()
 })
 
+/** Open the tunnel config directory in the OS file explorer. */
 ipcMain.handle('app:open-config-dir', () => {
   const dir = path.join(app.getPath('home'), '.config', 'odn-client', 'tunnels')
   shell.openPath(dir)

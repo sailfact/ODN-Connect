@@ -1,3 +1,11 @@
+/**
+ * Root application component.
+ *
+ * Manages top-level state (current route, tunnels, settings) and orchestrates
+ * communication with the main process via `window.api`. Tunnel status is polled
+ * every 5 seconds to keep the UI in sync with WireGuard's live state.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -5,6 +13,7 @@ import Tunnels from './components/Tunnels'
 import Settings from './components/Settings'
 import type { Route, Tunnel, AppSettings } from './types'
 
+/** Global type declaration for the IPC API exposed by the preload script. */
 declare global {
   interface Window {
     api: {

@@ -1,3 +1,12 @@
+/**
+ * Renderer-side TypeScript types.
+ *
+ * These mirror the main process types but include additional display fields
+ * (rxFormatted, txFormatted, handshakeFormatted) that are computed by the
+ * main process and sent over IPC for convenient rendering.
+ */
+
+/** A WireGuard peer with optional pre-formatted display strings from the main process. */
 export interface WireGuardPeer {
   publicKey: string
   endpoint?: string
@@ -13,6 +22,7 @@ export interface WireGuardPeer {
   name?: string
 }
 
+/** A tunnel configuration with live connection status, as received from the main process. */
 export interface Tunnel {
   id: string
   name: string
@@ -33,4 +43,5 @@ export interface AppSettings {
   theme: 'dark' | 'light' | 'system'
 }
 
+/** The three navigable views in the application. */
 export type Route = 'dashboard' | 'tunnels' | 'settings'
