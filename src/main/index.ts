@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
-import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTray, updateTrayMenu } from './tray'
 import {
@@ -17,8 +16,8 @@ import {
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
 import type { Tunnel, AppSettings } from './types'
-import * as path from 'path'
-import * as crypto from 'crypto'
+import * as path from 'node:path'
+import * as crypto from 'node:crypto'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -34,7 +33,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -61,7 +60,7 @@ function createWindow(): BrowserWindow {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
   return mainWindow
@@ -101,43 +100,53 @@ ipcMain.handle('tunnels:status', () => {
 })
 
 ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
-  const tunnels = getTunnels()
-  const tunnel = tunnels.find((t) => t.id === tunnelId)
-  if (!tunnel) return { success: false, error: 'Tunnel not found' }
+  try {
+    const tunnels = getTunnels()
+    const tunnel = tunnels.find((t) => t.id === tunnelId)
+    if (!tunnel) return { success: false, error: 'Tunnel not found' }
 
-  const result = await connectTunnel(tunnel.configPath)
-  if (result.success) {
-    updateTunnelConnected(tunnelId, true)
-    mainWindow && updateTrayMenu(mainWindow)
-    const settings = getSettings()
-    if (settings.showNotifications) {
-      new Notification({
-        title: 'ODN Client',
-        body: `Connected to ${tunnel.name}`
-      }).show()
+    const result = await connectTunnel(tunnel.configPath)
+    if (result.success) {
+      updateTunnelConnected(tunnelId, true)
+      mainWindow && updateTrayMenu(mainWindow)
+      const settings = getSettings()
+      if (settings.showNotifications) {
+        new Notification({
+          title: 'ODN Client',
+          body: `Connected to ${tunnel.name}`
+        }).show()
+      }
     }
+    return result
+  } catch (err) {
+    console.error('Failed to connect tunnel:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
-  return result
 })
 
 ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
-  const tunnels = getTunnels()
-  const tunnel = tunnels.find((t) => t.id === tunnelId)
-  if (!tunnel) return { success: false, error: 'Tunnel not found' }
+  try {
+    const tunnels = getTunnels()
+    const tunnel = tunnels.find((t) => t.id === tunnelId)
+    if (!tunnel) return { success: false, error: 'Tunnel not found' }
 
-  const result = await disconnectTunnel(tunnel.name)
-  if (result.success) {
-    updateTunnelConnected(tunnelId, false)
-    mainWindow && updateTrayMenu(mainWindow)
-    const settings = getSettings()
-    if (settings.showNotifications) {
-      new Notification({
-        title: 'ODN Client',
-        body: `Disconnected from ${tunnel.name}`
-      }).show()
+    const result = await disconnectTunnel(tunnel.name)
+    if (result.success) {
+      updateTunnelConnected(tunnelId, false)
+      mainWindow && updateTrayMenu(mainWindow)
+      const settings = getSettings()
+      if (settings.showNotifications) {
+        new Notification({
+          title: 'ODN Client',
+          body: `Disconnected from ${tunnel.name}`
+        }).show()
+      }
     }
+    return result
+  } catch (err) {
+    console.error('Failed to disconnect tunnel:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
-  return result
 })
 
 ipcMain.handle('tunnels:import', async () => {

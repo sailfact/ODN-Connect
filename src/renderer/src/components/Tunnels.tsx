@@ -80,8 +80,8 @@ function TunnelRow({
     setError(null)
     try {
       await onConnect()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection failed')
     } finally {
       setBusy(false)
     }
@@ -92,8 +92,8 @@ function TunnelRow({
     setError(null)
     try {
       await onDisconnect()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Disconnection failed')
     } finally {
       setBusy(false)
     }

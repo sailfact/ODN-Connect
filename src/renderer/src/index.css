@@ -37,7 +37,7 @@ body {
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b52752;
+  background: #3b5275;
 }
 
 /* Drag region for custom title bar */

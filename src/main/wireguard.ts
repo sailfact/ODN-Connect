@@ -36,8 +36,9 @@ export async function connectTunnel(configPath: string): Promise<{ success: bool
   try {
     await execAsync(`"${WG_EXE}" /installtunnelservice "${configPath}"`)
     return { success: true }
-  } catch (err: any) {
-    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string; message?: string }
+    const msg: string = e.stderr || e.stdout || e.message || 'Unknown error'
     // Error 1073 = service already exists and is running
     if (msg.includes('already exists') || msg.includes('1073')) {
       return { success: true }
@@ -57,8 +58,9 @@ export async function disconnectTunnel(interfaceName: string): Promise<{ success
   try {
     await execAsync(`"${WG_EXE}" /uninstalltunnelservice "${interfaceName}"`)
     return { success: true }
-  } catch (err: any) {
-    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string; message?: string }
+    const msg: string = e.stderr || e.stdout || e.message || 'Unknown error'
     // Error 1060 = service does not exist (already stopped)
     if (msg.includes('1060') || msg.includes('does not exist') || msg.includes('not found')) {
       return { success: true }
@@ -126,7 +128,8 @@ export function parseWgShowDump(): WireGuardInterface[] {
     }
 
     return Array.from(interfaces.values())
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse wg show dump:', err)
     return []
   }
 }
@@ -168,7 +171,8 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
     }
 
     return { address, dns, listenPort, peers }
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse tunnel config:', err)
     return {}
   }
 }
@@ -185,7 +189,9 @@ export function deleteConfigFile(configPath: string): void {
     if (fs.existsSync(configPath)) {
       fs.unlinkSync(configPath)
     }
-  } catch {}
+  } catch (err) {
+    console.error('Failed to delete config file:', err)
+  }
 }
 
 /**

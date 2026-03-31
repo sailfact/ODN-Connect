@@ -1,5 +1,5 @@
 import type { Route, Tunnel } from '../types'
-import logo from '../assets/logo.png'
+import logo from '../assets/Logo.png'
 
 interface SidebarProps {
   route: Route
