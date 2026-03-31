@@ -31,7 +31,6 @@ export interface AppSettings {
   minimizeToTray: boolean
   showNotifications: boolean
   theme: 'dark' | 'light' | 'system'
-  sudoMethod: 'pkexec' | 'sudo' | 'none'
 }
 
 export type Route = 'dashboard' | 'tunnels' | 'settings'

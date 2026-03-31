@@ -5,26 +5,26 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          primary: '#0f1117',
-          secondary: '#161b27',
-          tertiary: '#1e2535',
-          elevated: '#242d3f'
+          primary: '#07090f',
+          secondary: '#0b1018',
+          tertiary: '#0f1420',
+          elevated: '#162035'
         },
         accent: {
-          blue: '#3b82f6',
+          blue: '#00c8f0',
           green: '#22c55e',
           red: '#ef4444',
           yellow: '#eab308',
           purple: '#a855f7'
         },
         text: {
-          primary: '#f1f5f9',
-          secondary: '#94a3b8',
-          muted: '#64748b'
+          primary: '#e8eef6',
+          secondary: '#8ba8c4',
+          muted: '#4d6480'
         },
         border: {
-          DEFAULT: '#1e2d45',
-          light: '#2d3f5c'
+          DEFAULT: '#1a2840',
+          light: '#243551'
         }
       },
       fontFamily: {

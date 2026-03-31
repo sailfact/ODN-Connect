@@ -292,8 +292,8 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
               <p className="text-text-muted text-xs font-semibold uppercase tracking-wider mb-2">Tips</p>
               <ul className="text-text-secondary text-xs space-y-1">
                 <li>• WireGuard config files end in .conf</li>
-                <li>• Make sure wg-quick is installed on your system</li>
-                <li>• Run with pkexec or sudo for privilege escalation</li>
+                <li>• WireGuard must be installed from wireguard.com/install</li>
+                <li>• Run ODN Client as Administrator for tunnel management</li>
               </ul>
             </div>
           </div>
@@ -317,9 +317,8 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         <div className="mt-6 bg-accent-blue/5 border border-accent-blue/20 rounded-xl p-4 text-xs text-text-secondary">
           <p className="text-accent-blue font-semibold mb-1">How it works</p>
           <p>
-            ODN Connect uses <code className="bg-bg-elevated px-1 rounded text-text-primary">wg-quick</code> to
-            manage WireGuard tunnels. Configs are stored in{' '}
-            <code className="bg-bg-elevated px-1 rounded text-text-primary">~/.config/odn-connect/tunnels/</code>.
+            ODN Client uses the WireGuard Windows service to manage tunnels. Configs are stored in{' '}
+            <code className="bg-bg-elevated px-1 rounded text-text-primary">%APPDATA%\odn-client\tunnels\</code>.
           </p>
           <button
             onClick={() => window.api.openConfigDir()}

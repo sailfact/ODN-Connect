@@ -17,8 +17,8 @@ body,
 }
 
 body {
-  background-color: #0f1117;
-  color: #f1f5f9;
+  background-color: #07090f;
+  color: #e8eef6;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -40,7 +40,7 @@ body {
   background: #3b52752;
 }
 
-/* Drag region for macOS frameless window */
+/* Drag region for custom title bar */
 .drag-region {
   -webkit-app-region: drag;
 }

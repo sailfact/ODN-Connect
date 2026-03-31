@@ -42,7 +42,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   const connected = activeInterfaces.length > 0
 
   tray = new Tray(createIcon(connected))
-  tray.setToolTip('ODN Connect')
+  tray.setToolTip('ODN Client')
 
   updateTrayMenu(mainWindow)
 
@@ -89,7 +89,7 @@ export function updateTrayMenu(mainWindow: BrowserWindow): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'ODN Connect',
+      label: 'ODN Client',
       enabled: false
     },
     { type: 'separator' },
@@ -102,7 +102,7 @@ export function updateTrayMenu(mainWindow: BrowserWindow): void {
       ? [...tunnelMenuItems, { type: 'separator' as const }]
       : []),
     {
-      label: 'Open ODN Connect',
+      label: 'Open ODN Client',
       click: () => {
         mainWindow.show()
         mainWindow.focus()

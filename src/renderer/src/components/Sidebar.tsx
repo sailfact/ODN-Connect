@@ -1,4 +1,5 @@
 import type { Route, Tunnel } from '../types'
+import logo from '../assets/logo.png'
 
 interface SidebarProps {
   route: Route
@@ -23,7 +24,7 @@ const NavItem = ({
     onClick={onClick}
     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
       active
-        ? 'bg-accent-blue/15 text-accent-blue'
+        ? 'bg-accent-blue/10 text-accent-blue'
         : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
     }`}
   >
@@ -73,11 +74,9 @@ export default function Sidebar({ route, onNavigate, tunnels }: SidebarProps) {
     <aside className="w-56 shrink-0 flex flex-col bg-bg-secondary border-r border-border h-full">
       {/* App header */}
       <div className="drag-region px-4 py-4 flex items-center gap-3 border-b border-border">
-        <div className="w-8 h-8 rounded-lg bg-accent-blue flex items-center justify-center shrink-0">
-          <span className="text-white text-xs font-bold">WG</span>
-        </div>
+        <img src={logo} alt="ODN Client" className="w-8 h-8 shrink-0" />
         <div className="no-drag">
-          <div className="text-text-primary font-semibold text-sm leading-tight">ODN Connect</div>
+          <div className="text-text-primary font-semibold text-sm leading-tight">ODN Client</div>
           <div className="text-text-muted text-xs">WireGuard Client</div>
         </div>
       </div>

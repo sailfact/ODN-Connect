@@ -72,7 +72,7 @@ export default function App() {
       <div className="flex items-center justify-center h-full bg-bg-primary">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-          <p className="text-text-secondary text-sm">Starting ODN Connect...</p>
+          <p className="text-text-secondary text-sm">Starting ODN Client...</p>
         </div>
       </div>
     )

@@ -30,7 +30,7 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     frame: true,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: 'default',
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
     webPreferences: {
@@ -112,7 +112,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
     const settings = getSettings()
     if (settings.showNotifications) {
       new Notification({
-        title: 'ODN Connect',
+        title: 'ODN Client',
         body: `Connected to ${tunnel.name}`
       }).show()
     }
@@ -132,7 +132,7 @@ ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
     const settings = getSettings()
     if (settings.showNotifications) {
       new Notification({
-        title: 'ODN Connect',
+        title: 'ODN Client',
         body: `Disconnected from ${tunnel.name}`
       }).show()
     }
@@ -214,14 +214,14 @@ ipcMain.handle('app:version', () => {
 })
 
 ipcMain.handle('app:open-config-dir', () => {
-  const dir = path.join(app.getPath('home'), '.config', 'odn-connect', 'tunnels')
+  const dir = path.join(app.getPath('home'), '.config', 'odn-client', 'tunnels')
   shell.openPath(dir)
 })
 
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.odn.connect')
+  electronApp.setAppUserModelId('com.odn.client')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -242,10 +242,8 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    const settings = getSettings()
-    if (!settings.minimizeToTray) {
-      app.quit()
-    }
+  const settings = getSettings()
+  if (!settings.minimizeToTray) {
+    app.quit()
   }
 })

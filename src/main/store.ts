@@ -5,8 +5,7 @@ const defaultSettings: AppSettings = {
   launchAtStartup: false,
   minimizeToTray: true,
   showNotifications: true,
-  theme: 'dark',
-  sudoMethod: 'pkexec'
+  theme: 'dark'
 }
 
 const store = new Store<AppStore>({

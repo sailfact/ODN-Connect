@@ -1,5 +1,5 @@
-appId: com.odn.connect
-productName: ODN Connect
+appId: com.odn.client
+productName: ODN Client
 directories:
   buildResources: resources
 files:
@@ -13,7 +13,8 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: odn-connect
+  executableName: odn-client
+  requestedExecutionLevel: requireAdministrator
   target:
     - target: nsis
       arch:
@@ -23,24 +24,6 @@ nsis:
   shortcutName: '${productName}'
   uninstallDisplayName: '${productName}'
   createDesktopShortcut: always
-mac:
-  entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
-dmg:
-  artifactName: '${name}-${version}.${ext}'
-linux:
-  target:
-    - AppImage
-    - deb
-  maintainer: odn
-  category: Network
-appImage:
-  artifactName: '${name}-${version}.${ext}'
 npmRebuild: false
 publish:
   provider: generic

@@ -99,7 +99,7 @@ export default function Settings({ settings, onSave }: SettingsProps) {
       <div className="max-w-2xl mx-auto px-6 py-6">
         <div className="mb-6">
           <h1 className="text-text-primary text-xl font-bold">Settings</h1>
-          <p className="text-text-secondary text-sm mt-1">Configure ODN Connect behavior</p>
+          <p className="text-text-secondary text-sm mt-1">Configure ODN Client behavior</p>
         </div>
 
         {/* General */}
@@ -110,7 +110,7 @@ export default function Settings({ settings, onSave }: SettingsProps) {
           <div className="divide-y divide-border/50">
             <Toggle
               label="Launch at startup"
-              description="Automatically start ODN Connect when you log in"
+              description="Automatically start ODN Client when you log in"
               checked={local.launchAtStartup}
               onChange={(v) => set('launchAtStartup', v)}
             />
@@ -134,25 +134,16 @@ export default function Settings({ settings, onSave }: SettingsProps) {
           <h2 className="text-text-primary font-semibold text-sm mb-3 pb-3 border-b border-border">
             WireGuard
           </h2>
-          <div className="divide-y divide-border/50">
-            <SelectField
-              label="Privilege escalation"
-              description="Method to gain root access for wg-quick"
-              value={local.sudoMethod}
-              options={[
-                { value: 'pkexec', label: 'pkexec (PolicyKit)' },
-                { value: 'sudo', label: 'sudo' },
-                { value: 'none', label: 'None (already privileged)' }
-              ]}
-              onChange={(v) => set('sudoMethod', v as AppSettings['sudoMethod'])}
-            />
-          </div>
-          <div className="mt-3 bg-bg-primary rounded-lg p-3 text-xs text-text-secondary">
-            <p className="font-semibold text-text-primary mb-1">Passwordless sudo setup (optional)</p>
-            <p>To avoid password prompts, add to <code className="bg-bg-elevated px-1 rounded text-text-primary">/etc/sudoers</code>:</p>
-            <pre className="mt-2 bg-bg-elevated rounded p-2 text-text-primary font-mono overflow-x-auto">
-              {`%sudo ALL=(ALL) NOPASSWD: /usr/bin/wg-quick`}
-            </pre>
+          <div className="bg-bg-primary rounded-lg p-3 text-xs text-text-secondary">
+            <p className="font-semibold text-text-primary mb-1">Administrator privileges required</p>
+            <p>
+              ODN Client uses the WireGuard Windows service to manage tunnels.
+              Connecting and disconnecting requires the app to be run as Administrator.
+            </p>
+            <p className="mt-2">
+              WireGuard must be installed from{' '}
+              <span className="text-accent-blue font-mono">wireguard.com/install</span>
+            </p>
           </div>
         </div>
 
@@ -181,7 +172,7 @@ export default function Settings({ settings, onSave }: SettingsProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-text-secondary">Application</span>
-              <span className="text-text-primary font-medium">ODN Connect</span>
+              <span className="text-text-primary font-medium">ODN Client</span>
             </div>
             <div className="flex justify-between">
               <span className="text-text-secondary">Description</span>

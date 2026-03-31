@@ -5,80 +5,77 @@ import * as path from 'path'
 import * as os from 'os'
 import { parse as parseIni } from 'ini'
 import type { Tunnel, WireGuardPeer, WireGuardInterface, WireGuardStatus } from './types'
-import { getSettings } from './store'
 
 const execAsync = promisify(exec)
 
+// WireGuard for Windows installs to Program Files
+const WG_DIR = 'C:\\Program Files\\WireGuard'
+export const WG_EXE = path.join(WG_DIR, 'wireguard.exe')
+export const WG_CLI = path.join(WG_DIR, 'wg.exe')
+
 export function getConfigDir(): string {
-  const dir = path.join(os.homedir(), '.config', 'odn-connect', 'tunnels')
+  const dir = path.join(os.homedir(), 'AppData', 'Roaming', 'odn-client', 'tunnels')
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
   }
   return dir
 }
 
-function getPrivilegePrefix(): string {
-  const { sudoMethod } = getSettings()
-  if (sudoMethod === 'none') return ''
-  if (sudoMethod === 'sudo') return 'sudo '
-  return 'pkexec '
-}
-
-export function isWireGuardAvailable(): boolean {
-  try {
-    execSync('which wg-quick', { stdio: 'pipe' })
-    return true
-  } catch {
-    return false
-  }
-}
-
 export function isWireGuardInstalled(): { wg: boolean; wgQuick: boolean } {
-  let wg = false
-  let wgQuick = false
-  try {
-    execSync('which wg', { stdio: 'pipe' })
-    wg = true
-  } catch {}
-  try {
-    execSync('which wg-quick', { stdio: 'pipe' })
-    wgQuick = true
-  } catch {}
-  return { wg, wgQuick }
+  return {
+    wg: fs.existsSync(WG_CLI),
+    wgQuick: fs.existsSync(WG_EXE)
+  }
 }
 
+/**
+ * Connect by installing a WireGuard tunnel as a Windows service.
+ * Requires the app to be running with administrator privileges.
+ */
 export async function connectTunnel(configPath: string): Promise<{ success: boolean; error?: string }> {
-  const prefix = getPrivilegePrefix()
   try {
-    await execAsync(`${prefix}wg-quick up "${configPath}"`)
+    await execAsync(`"${WG_EXE}" /installtunnelservice "${configPath}"`)
     return { success: true }
   } catch (err: any) {
-    const msg = err.stderr || err.message || 'Unknown error'
-    // If already up, that's fine
-    if (msg.includes('already exists')) {
+    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
+    // Error 1073 = service already exists and is running
+    if (msg.includes('already exists') || msg.includes('1073')) {
       return { success: true }
+    }
+    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') || msg.includes('administrator')) {
+      return { success: false, error: 'Administrator privileges required. Please run ODN Client as Administrator.' }
     }
     return { success: false, error: msg }
   }
 }
 
+/**
+ * Disconnect by uninstalling the WireGuard tunnel Windows service.
+ * Requires the app to be running with administrator privileges.
+ */
 export async function disconnectTunnel(interfaceName: string): Promise<{ success: boolean; error?: string }> {
-  const prefix = getPrivilegePrefix()
   try {
-    await execAsync(`${prefix}wg-quick down "${interfaceName}"`)
+    await execAsync(`"${WG_EXE}" /uninstalltunnelservice "${interfaceName}"`)
     return { success: true }
   } catch (err: any) {
-    const msg = err.stderr || err.message || 'Unknown error'
-    if (msg.includes('not found') || msg.includes('No such')) {
+    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
+    // Error 1060 = service does not exist (already stopped)
+    if (msg.includes('1060') || msg.includes('does not exist') || msg.includes('not found')) {
       return { success: true }
+    }
+    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') || msg.includes('administrator')) {
+      return { success: false, error: 'Administrator privileges required. Please run ODN Client as Administrator.' }
     }
     return { success: false, error: msg }
   }
 }
 
+/**
+ * Returns names of currently active WireGuard interfaces by querying the wg CLI.
+ */
 export function getActiveInterfaces(): string[] {
   try {
-    const result = execSync('wg show interfaces', { stdio: 'pipe' }).toString().trim()
+    const result = execSync(`"${WG_CLI}" show interfaces`, { stdio: 'pipe' }).toString().trim()
     if (!result) return []
     return result.split(/\s+/).filter(Boolean)
   } catch {
@@ -86,9 +83,15 @@ export function getActiveInterfaces(): string[] {
   }
 }
 
+/**
+ * Parses `wg show all dump` output into structured interface data.
+ * The dump format is tab-separated:
+ *   Interface line (5 cols): name, private-key, public-key, listen-port, fwmark
+ *   Peer line (9 cols):      iface, pub-key, preshared-key, endpoint, allowed-ips, latest-handshake, rx-bytes, tx-bytes, keepalive
+ */
 export function parseWgShowDump(): WireGuardInterface[] {
   try {
-    const output = execSync('wg show all dump', { stdio: 'pipe' }).toString().trim()
+    const output = execSync(`"${WG_CLI}" show all dump`, { stdio: 'pipe' }).toString().trim()
     if (!output) return []
 
     const interfaces: Map<string, WireGuardInterface> = new Map()
@@ -96,7 +99,6 @@ export function parseWgShowDump(): WireGuardInterface[] {
     for (const line of output.split('\n')) {
       const parts = line.split('\t')
       if (parts.length === 5) {
-        // Interface line: name, privatekey, publickey, listenport, fwmark
         const [name, , publicKey, listenPort] = parts
         interfaces.set(name, {
           name,
@@ -105,7 +107,6 @@ export function parseWgShowDump(): WireGuardInterface[] {
           peers: []
         })
       } else if (parts.length === 9) {
-        // Peer line: iface, pubkey, preshared, endpoint, allowed_ips, latest_handshake, rx, tx, keepalive
         const [iface, pubkey, preshared, endpoint, allowedIPs, latestHandshake, rx, tx, keepalive] = parts
         const ifc = interfaces.get(iface)
         if (ifc) {
@@ -140,7 +141,7 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
     const parsed = parseIni(content)
 
     const iface = parsed['Interface'] || {}
-    const addresses = iface['Address']
+    const address = iface['Address']
       ? String(iface['Address']).split(',').map((s: string) => s.trim())
       : []
     const dns = iface['DNS']
@@ -149,7 +150,6 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
     const listenPort = iface['ListenPort'] ? parseInt(String(iface['ListenPort'])) : undefined
 
     const peers: WireGuardPeer[] = []
-    // ini may flatten multiple [Peer] sections — handle both array and object
     const rawPeers = parsed['Peer']
     if (rawPeers) {
       const peerList = Array.isArray(rawPeers) ? rawPeers : [rawPeers]
@@ -167,44 +167,16 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
       }
     }
 
-    return { address: addresses, dns, listenPort, peers }
+    return { address, dns, listenPort, peers }
   } catch {
     return {}
   }
-}
-
-export function writeConfigFile(tunnel: Tunnel, privateKey: string): string {
-  const configDir = getConfigDir()
-  const configPath = path.join(configDir, `${tunnel.name}.conf`)
-
-  let content = '[Interface]\n'
-  if (privateKey) content += `PrivateKey = ${privateKey}\n`
-  if (tunnel.address && tunnel.address.length > 0) {
-    content += `Address = ${tunnel.address.join(', ')}\n`
-  }
-  if (tunnel.listenPort) content += `ListenPort = ${tunnel.listenPort}\n`
-  if (tunnel.dns && tunnel.dns.length > 0) {
-    content += `DNS = ${tunnel.dns.join(', ')}\n`
-  }
-
-  for (const peer of tunnel.peers) {
-    content += '\n[Peer]\n'
-    content += `PublicKey = ${peer.publicKey}\n`
-    if (peer.endpoint) content += `Endpoint = ${peer.endpoint}\n`
-    if (peer.allowedIPs.length > 0) content += `AllowedIPs = ${peer.allowedIPs.join(', ')}\n`
-    if (peer.persistentKeepalive) content += `PersistentKeepalive = ${peer.persistentKeepalive}\n`
-    if (peer.presharedKey) content += `PresharedKey = ${peer.presharedKey}\n`
-  }
-
-  fs.writeFileSync(configPath, content, { mode: 0o600 })
-  return configPath
 }
 
 export function importConfigFile(sourcePath: string, tunnelName: string): string {
   const configDir = getConfigDir()
   const destPath = path.join(configDir, `${tunnelName}.conf`)
   fs.copyFileSync(sourcePath, destPath)
-  fs.chmodSync(destPath, 0o600)
   return destPath
 }
 
@@ -216,10 +188,17 @@ export function deleteConfigFile(configPath: string): void {
   } catch {}
 }
 
+/**
+ * Generates a WireGuard key pair using the wg CLI.
+ * On Windows, piping is done via PowerShell.
+ */
 export function generateKeyPair(): { privateKey: string; publicKey: string } | null {
   try {
-    const privateKey = execSync('wg genkey', { stdio: 'pipe' }).toString().trim()
-    const publicKey = execSync(`echo "${privateKey}" | wg pubkey`, { stdio: 'pipe' }).toString().trim()
+    const privateKey = execSync(`"${WG_CLI}" genkey`, { stdio: 'pipe' }).toString().trim()
+    const publicKey = execSync(
+      `powershell -Command "echo '${privateKey}' | & '${WG_CLI}' pubkey"`,
+      { stdio: 'pipe' }
+    ).toString().trim()
     return { privateKey, publicKey }
   } catch {
     return null
