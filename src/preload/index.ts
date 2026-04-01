@@ -29,6 +29,10 @@ const api = {
   getVersion: () => ipcRenderer.invoke('app:version'),
   openConfigDir: () => ipcRenderer.invoke('app:open-config-dir'),
 
+  // Service management
+  getServiceStatus: () => ipcRenderer.invoke('service:status'),
+  installService: () => ipcRenderer.invoke('service:install'),
+
   // Events from main process (tray menu triggers navigation)
   onNavigate: (cb: (route: string) => void) => {
     ipcRenderer.on('navigate', (_, route) => cb(route))

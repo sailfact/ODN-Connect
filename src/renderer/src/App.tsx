@@ -11,7 +11,7 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
 import Tunnels from './components/Tunnels'
 import Settings from './components/Settings'
-import type { Route, Tunnel, AppSettings } from './types'
+import type { Route, Tunnel, AppSettings, ServiceStatus } from './types'
 
 /** Global type declaration for the IPC API exposed by the preload script. */
 declare global {
@@ -30,6 +30,8 @@ declare global {
       getVersion: () => Promise<string>
       openConfigDir: () => Promise<void>
       onNavigate: (cb: (route: string) => void) => () => void
+      getServiceStatus: () => Promise<ServiceStatus>
+      installService: () => Promise<{ success: boolean; error?: string }>
     }
   }
 }
@@ -39,6 +41,7 @@ export default function App() {
   const [tunnels, setTunnels] = useState<Tunnel[]>([])
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [wgInstalled, setWgInstalled] = useState<{ wg: boolean; wgQuick: boolean } | null>(null)
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   const refreshTunnels = useCallback(async () => {
@@ -48,14 +51,16 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      const [installed, tunnelData, settingsData] = await Promise.all([
+      const [installed, tunnelData, settingsData, svcStatus] = await Promise.all([
         window.api.checkInstalled(),
         window.api.getTunnelStatus(),
-        window.api.getSettings()
+        window.api.getSettings(),
+        window.api.getServiceStatus()
       ])
       setWgInstalled(installed)
       setTunnels(tunnelData)
       setSettings(settingsData)
+      setServiceStatus(svcStatus)
       setLoading(false)
     }
     init()
@@ -99,6 +104,7 @@ export default function App() {
           <Dashboard
             tunnels={tunnels}
             wgInstalled={wgInstalled}
+            serviceStatus={serviceStatus}
             onNavigate={setRoute}
             onConnect={async (id) => {
               await window.api.connectTunnel(id)
@@ -107,6 +113,13 @@ export default function App() {
             onDisconnect={async (id) => {
               await window.api.disconnectTunnel(id)
               refreshTunnels()
+            }}
+            onInstallService={async () => {
+              const result = await window.api.installService()
+              if (result.success) {
+                setServiceStatus({ connected: true, installed: true })
+              }
+              return result
             }}
           />
         )}

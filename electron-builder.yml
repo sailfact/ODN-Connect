@@ -12,9 +12,14 @@ files:
   - '!{karma.conf.js,.mocharc.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: out/service/
+    to: service/
+    filter:
+      - '**/*'
 win:
   executableName: odn-client
-  requestedExecutionLevel: requireAdministrator
+  requestedExecutionLevel: asInvoker
   target:
     - target: nsis
       arch:
@@ -24,6 +29,7 @@ nsis:
   shortcutName: '${productName}'
   uninstallDisplayName: '${productName}'
   createDesktopShortcut: always
+  include: build/installer.nsh
 mac:
   target:
     - target: dmg

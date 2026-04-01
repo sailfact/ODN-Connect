@@ -8,14 +8,19 @@
  * The tray context menu shows all tunnels, their status, and quick-access links.
  * Left-clicking the tray icon toggles window visibility.
  * The menu auto-refreshes every 5 seconds to stay in sync with WireGuard state.
+ *
+ * Since getActiveInterfaces() is async (communicates with the tunnel service),
+ * the tray reads from a cached list that is refreshed by an async polling loop.
  */
 
 import { app, Tray, Menu, nativeImage, BrowserWindow } from 'electron'
-import * as path from 'path'
 import { getActiveInterfaces } from './wireguard'
 import { getTunnels } from './store'
 
 let tray: Tray | null = null
+
+/** Cached list of active interface names, refreshed every 5 seconds. */
+let cachedActiveInterfaces: string[] = []
 
 /**
  * Generates a 16x16 circle icon as a NativeImage using raw RGBA pixel data.
@@ -52,10 +57,18 @@ function createIcon(connected: boolean): Electron.NativeImage {
   return nativeImage.createFromBuffer(buf, { width: size, height: size })
 }
 
+/** Refresh the cached active interfaces list from the service. */
+async function refreshActiveInterfaces(): Promise<void> {
+  try {
+    cachedActiveInterfaces = await getActiveInterfaces()
+  } catch {
+    // Keep the previous cache on error
+  }
+}
+
 /** Creates the system tray icon, sets up click behavior, and starts a 5-second refresh loop. */
 export function createTray(mainWindow: BrowserWindow): Tray {
-  const activeInterfaces = getActiveInterfaces()
-  const connected = activeInterfaces.length > 0
+  const connected = cachedActiveInterfaces.length > 0
 
   tray = new Tray(createIcon(connected))
   tray.setToolTip('ODN Client')
@@ -71,8 +84,13 @@ export function createTray(mainWindow: BrowserWindow): Tray {
     }
   })
 
-  // Refresh every 5s
-  setInterval(() => updateTrayMenu(mainWindow), 5000)
+  // Do an initial async refresh, then poll every 5s
+  refreshActiveInterfaces().then(() => updateTrayMenu(mainWindow))
+
+  setInterval(async () => {
+    await refreshActiveInterfaces()
+    updateTrayMenu(mainWindow)
+  }, 5000)
 
   return tray
 }
@@ -81,18 +99,17 @@ export function createTray(mainWindow: BrowserWindow): Tray {
 export function updateTrayMenu(mainWindow: BrowserWindow): void {
   if (!tray) return
 
-  const activeInterfaces = getActiveInterfaces()
-  const connected = activeInterfaces.length > 0
+  const connected = cachedActiveInterfaces.length > 0
   const tunnels = getTunnels()
 
   tray.setImage(createIcon(connected))
 
   const statusLabel = connected
-    ? `Connected (${activeInterfaces.join(', ')})`
+    ? `Connected (${cachedActiveInterfaces.join(', ')})`
     : 'Not connected'
 
   const tunnelMenuItems: Electron.MenuItemConstructorOptions[] = tunnels.map((t) => {
-    const isActive = activeInterfaces.includes(t.name)
+    const isActive = cachedActiveInterfaces.includes(t.name)
     return {
       label: `${isActive ? '● ' : '○ '}${t.name}`,
       enabled: true,
