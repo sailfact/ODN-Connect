@@ -1,3 +1,15 @@
+/**
+ * Settings view — configure ODN Connect behavior and preferences.
+ *
+ * Sections:
+ * - General: launch at startup, minimize to tray, notifications
+ * - WireGuard: info about admin privileges and installation
+ * - Appearance: theme selection (dark/light/system)
+ * - About: app info and config directory link
+ *
+ * Settings are saved to electron-store on the main process side.
+ */
+
 import { useState } from 'react'
 import type { AppSettings } from '../types'
 
@@ -6,6 +18,7 @@ interface SettingsProps {
   onSave: (s: AppSettings) => Promise<void>
 }
 
+/** Reusable toggle switch component with a label and optional description. */
 function Toggle({
   label,
   description,
@@ -39,6 +52,7 @@ function Toggle({
   )
 }
 
+/** Reusable dropdown select field with a label and optional description. */
 function SelectField({
   label,
   description,
@@ -135,10 +149,11 @@ export default function Settings({ settings, onSave }: SettingsProps) {
             WireGuard
           </h2>
           <div className="bg-bg-primary rounded-lg p-3 text-xs text-text-secondary">
-            <p className="font-semibold text-text-primary mb-1">Administrator privileges required</p>
+            <p className="font-semibold text-text-primary mb-1">Elevated privileges required</p>
             <p>
-              ODN Client uses the WireGuard Windows service to manage tunnels.
-              Connecting and disconnecting requires the app to be run as Administrator.
+              ODN Client uses WireGuard to manage tunnels.
+              Connecting and disconnecting requires elevated privileges
+              (Administrator on Windows, root/sudo on Linux and macOS).
             </p>
             <p className="mt-2">
               WireGuard must be installed from{' '}

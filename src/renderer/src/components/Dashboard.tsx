@@ -1,3 +1,11 @@
+/**
+ * Dashboard view — provides an at-a-glance overview of the VPN network.
+ *
+ * Displays summary statistics (active tunnels, peer count, total transfer),
+ * quick-action tunnel cards for connecting/disconnecting, and a detailed
+ * view of active peers with their handshake and transfer status.
+ */
+
 import { useState } from 'react'
 import type { Tunnel, Route } from '../types'
 
@@ -9,6 +17,7 @@ interface DashboardProps {
   onDisconnect: (id: string) => Promise<void>
 }
 
+/** A small card displaying a single statistic with a label and optional subtitle. */
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="card flex flex-col gap-1">
@@ -19,6 +28,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   )
 }
 
+/** A compact tunnel card with status dot, info summary, and connect/disconnect toggle. */
 function TunnelCard({
   tunnel,
   onConnect,
@@ -87,6 +97,7 @@ function TunnelCard({
   )
 }
 
+/** Converts a byte count to a human-readable string for display in the UI. */
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -120,8 +131,8 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
               <div>
                 <p className="text-accent-yellow font-semibold text-sm">WireGuard not fully installed</p>
                 <p className="text-text-secondary text-xs mt-1">
-                  {!wgInstalled.wg && 'wg.exe not found. '}
-                  {!wgInstalled.wgQuick && 'wireguard.exe not found. '}
+                  {!wgInstalled.wg && 'wg not found. '}
+                  {!wgInstalled.wgQuick && 'wg-quick / wireguard not found. '}
                   Download and install WireGuard from{' '}
                   <code className="bg-bg-elevated px-1 rounded text-text-primary">wireguard.com/install</code>
                 </p>

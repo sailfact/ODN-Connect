@@ -1,5 +1,13 @@
+/**
+ * Main process entry point for ODN Connect.
+ *
+ * Responsibilities:
+ * - Create and manage the BrowserWindow
+ * - Register IPC handlers that bridge the renderer to WireGuard CLI operations
+ * - Manage app lifecycle (tray, single-instance, close-to-tray)
+ */
+
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
-import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTray, updateTrayMenu } from './tray'
 import {
@@ -13,15 +21,22 @@ import {
   generateKeyPair,
   isWireGuardInstalled,
   formatBytes,
-  formatHandshake
+  formatHandshake,
+  getConfigDir
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
 import type { Tunnel, AppSettings } from './types'
-import * as path from 'path'
-import * as crypto from 'crypto'
+import * as path from 'node:path'
+import * as crypto from 'node:crypto'
 
+/** Singleton reference to the main application window. */
 let mainWindow: BrowserWindow | null = null
 
+/**
+ * Creates the main application window with context-isolated preload script.
+ * The window starts hidden and shows itself once content is ready to avoid a white flash.
+ * If "minimize to tray" is enabled, closing the window hides it instead of quitting.
+ */
 function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 1000,
@@ -34,7 +49,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -53,6 +68,7 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Open external links in the default browser instead of a new Electron window
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -61,7 +77,7 @@ function createWindow(): BrowserWindow {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
   return mainWindow
@@ -69,22 +85,28 @@ function createWindow(): BrowserWindow {
 
 // ─── IPC Handlers ────────────────────────────────────────────────────────────
 
+/** Check whether WireGuard binaries (wg.exe, wireguard.exe) are present on disk. */
 ipcMain.handle('wg:installed', () => {
   return isWireGuardInstalled()
 })
 
+/** Return all stored tunnels with their live connection status from WireGuard. */
 ipcMain.handle('tunnels:list', () => {
   const tunnels = getTunnels()
   const active = getActiveInterfaces()
   return tunnels.map((t) => ({ ...t, connected: active.includes(t.name) }))
 })
 
+/**
+ * Return tunnels enriched with live WireGuard stats (peer transfer, handshake times).
+ * This is polled every 5 seconds from the renderer to keep the UI current.
+ */
 ipcMain.handle('tunnels:status', () => {
   const status = getWireGuardStatus()
   const tunnels = getTunnels()
   const active = getActiveInterfaces()
 
-  // Merge wg stats into tunnel data
+  // Merge live wg peer stats into stored tunnel data
   return tunnels.map((tunnel) => {
     const ifc = status.interfaces.find((i) => i.name === tunnel.name)
     return {
@@ -100,46 +122,62 @@ ipcMain.handle('tunnels:status', () => {
   })
 })
 
+/** Install a WireGuard tunnel as a Windows service and notify the user on success. */
 ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
-  const tunnels = getTunnels()
-  const tunnel = tunnels.find((t) => t.id === tunnelId)
-  if (!tunnel) return { success: false, error: 'Tunnel not found' }
+  try {
+    const tunnels = getTunnels()
+    const tunnel = tunnels.find((t) => t.id === tunnelId)
+    if (!tunnel) return { success: false, error: 'Tunnel not found' }
 
-  const result = await connectTunnel(tunnel.configPath)
-  if (result.success) {
-    updateTunnelConnected(tunnelId, true)
-    mainWindow && updateTrayMenu(mainWindow)
-    const settings = getSettings()
-    if (settings.showNotifications) {
-      new Notification({
-        title: 'ODN Client',
-        body: `Connected to ${tunnel.name}`
-      }).show()
+    const result = await connectTunnel(tunnel.configPath)
+    if (result.success) {
+      updateTunnelConnected(tunnelId, true)
+      mainWindow && updateTrayMenu(mainWindow)
+      const settings = getSettings()
+      if (settings.showNotifications) {
+        new Notification({
+          title: 'ODN Client',
+          body: `Connected to ${tunnel.name}`
+        }).show()
+      }
     }
+    return result
+  } catch (err) {
+    console.error('Failed to connect tunnel:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
-  return result
 })
 
+/** Uninstall a WireGuard tunnel service and notify the user on success. */
 ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
-  const tunnels = getTunnels()
-  const tunnel = tunnels.find((t) => t.id === tunnelId)
-  if (!tunnel) return { success: false, error: 'Tunnel not found' }
+  try {
+    const tunnels = getTunnels()
+    const tunnel = tunnels.find((t) => t.id === tunnelId)
+    if (!tunnel) return { success: false, error: 'Tunnel not found' }
 
-  const result = await disconnectTunnel(tunnel.name)
-  if (result.success) {
-    updateTunnelConnected(tunnelId, false)
-    mainWindow && updateTrayMenu(mainWindow)
-    const settings = getSettings()
-    if (settings.showNotifications) {
-      new Notification({
-        title: 'ODN Client',
-        body: `Disconnected from ${tunnel.name}`
-      }).show()
+    const result = await disconnectTunnel(tunnel.name)
+    if (result.success) {
+      updateTunnelConnected(tunnelId, false)
+      mainWindow && updateTrayMenu(mainWindow)
+      const settings = getSettings()
+      if (settings.showNotifications) {
+        new Notification({
+          title: 'ODN Client',
+          body: `Disconnected from ${tunnel.name}`
+        }).show()
+      }
     }
+    return result
+  } catch (err) {
+    console.error('Failed to disconnect tunnel:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
-  return result
 })
 
+/**
+ * Open a file dialog for the user to pick a WireGuard .conf file.
+ * The config is copied into the app's data directory, parsed, and saved to the store.
+ */
 ipcMain.handle('tunnels:import', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Import WireGuard Config',
@@ -153,6 +191,7 @@ ipcMain.handle('tunnels:import', async () => {
 
   const sourcePath = result.filePaths[0]
   const baseName = path.basename(sourcePath, '.conf')
+  // Sanitize the filename to a safe tunnel/service name (alphanumeric, dash, underscore)
   const tunnelName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_')
 
   try {
@@ -178,6 +217,7 @@ ipcMain.handle('tunnels:import', async () => {
   }
 })
 
+/** Disconnect a tunnel (if active), remove its config file, and delete it from the store. */
 ipcMain.handle('tunnels:delete', async (_, tunnelId: string) => {
   const tunnels = getTunnels()
   const tunnel = tunnels.find((t) => t.id === tunnelId)
@@ -195,6 +235,7 @@ ipcMain.handle('tunnels:delete', async (_, tunnelId: string) => {
   return { success: true }
 })
 
+/** Generate a WireGuard key pair (private + public) via the wg CLI. */
 ipcMain.handle('tunnels:generate-keys', () => {
   return generateKeyPair()
 })
@@ -203,6 +244,7 @@ ipcMain.handle('settings:get', () => {
   return getSettings()
 })
 
+/** Persist settings and sync the OS login-item state with the launchAtStartup preference. */
 ipcMain.handle('settings:save', (_, settings: AppSettings) => {
   saveSettings(settings)
   app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup })
@@ -213,9 +255,9 @@ ipcMain.handle('app:version', () => {
   return app.getVersion()
 })
 
+/** Open the tunnel config directory in the OS file explorer. */
 ipcMain.handle('app:open-config-dir', () => {
-  const dir = path.join(app.getPath('home'), '.config', 'odn-client', 'tunnels')
-  shell.openPath(dir)
+  shell.openPath(getConfigDir())
 })
 
 // ─── App Lifecycle ────────────────────────────────────────────────────────────

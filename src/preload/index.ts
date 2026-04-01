@@ -1,6 +1,15 @@
+/**
+ * Preload script — runs in a sandboxed context before the renderer loads.
+ *
+ * Exposes a typed `window.api` object to the renderer via contextBridge.
+ * This is the only way the renderer can communicate with the main process,
+ * ensuring context isolation (no direct access to Node.js or Electron APIs).
+ */
+
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+/** IPC API exposed to the renderer as `window.api`. */
 const api = {
   // WireGuard & Tunnels
   checkInstalled: () => ipcRenderer.invoke('wg:installed'),
@@ -20,7 +29,7 @@ const api = {
   getVersion: () => ipcRenderer.invoke('app:version'),
   openConfigDir: () => ipcRenderer.invoke('app:open-config-dir'),
 
-  // Events from main process
+  // Events from main process (tray menu triggers navigation)
   onNavigate: (cb: (route: string) => void) => {
     ipcRenderer.on('navigate', (_, route) => cb(route))
     return () => ipcRenderer.removeAllListeners('navigate')
@@ -35,8 +44,6 @@ if (process.contextIsolated) {
     console.error(err)
   }
 } else {
-  // @ts-ignore
-  window.electron = electronAPI
-  // @ts-ignore
-  window.api = api
+  ;(window as Record<string, unknown>).electron = electronAPI
+  ;(window as Record<string, unknown>).api = api
 }

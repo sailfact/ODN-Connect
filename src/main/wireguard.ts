@@ -1,3 +1,19 @@
+/**
+ * WireGuard CLI integration layer.
+ *
+ * This module wraps the WireGuard CLI tools (wg, wg-quick / wireguard.exe)
+ * to provide tunnel management capabilities:
+ * - Connect/disconnect tunnels (Windows: service install; Linux/macOS: wg-quick)
+ * - Query active interfaces and live peer statistics
+ * - Parse and import WireGuard .conf files
+ * - Generate key pairs for new configurations
+ *
+ * Platform support:
+ * - Windows: uses wireguard.exe /installtunnelservice (requires Administrator)
+ * - Linux: uses wg-quick up/down (requires root or sudo)
+ * - macOS: uses wg-quick up/down (requires root or sudo)
+ */
+
 import { execSync, exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs'
@@ -7,75 +23,195 @@ import { parse as parseIni } from 'ini'
 import type { Tunnel, WireGuardPeer, WireGuardInterface, WireGuardStatus } from './types'
 
 const execAsync = promisify(exec)
+const platform = process.platform
 
-// WireGuard for Windows installs to Program Files
-const WG_DIR = 'C:\\Program Files\\WireGuard'
-export const WG_EXE = path.join(WG_DIR, 'wireguard.exe')
-export const WG_CLI = path.join(WG_DIR, 'wg.exe')
+// ─── Platform-specific binary paths ──────────────────────────────────────────
 
+/**
+ * Resolves the path to a CLI tool by checking if it exists on the system PATH.
+ * Returns the tool name itself (for PATH-based lookup) or a platform-specific default.
+ */
+function resolveWgPaths(): { wgExe: string; wgCli: string } {
+  if (platform === 'win32') {
+    // Windows: WireGuard installs to Program Files with .exe extensions
+    const wgDir = 'C:\\Program Files\\WireGuard'
+    return {
+      wgExe: path.join(wgDir, 'wireguard.exe'),
+      wgCli: path.join(wgDir, 'wg.exe')
+    }
+  }
+  // Linux and macOS: wg and wg-quick are typically on the system PATH
+  return {
+    wgExe: 'wg-quick',
+    wgCli: 'wg'
+  }
+}
+
+/** Path to wireguard.exe (Windows) or wg-quick (Linux/macOS) — manages tunnel lifecycle. */
+export const WG_EXE = resolveWgPaths().wgExe
+/** Path to wg.exe (Windows) or wg (Linux/macOS) — queries interface status and generates keys. */
+export const WG_CLI = resolveWgPaths().wgCli
+
+// ─── Config directory ────────────────────────────────────────────────────────
+
+/**
+ * Returns the directory where tunnel .conf files are stored.
+ * Creates the directory if it doesn't exist.
+ *
+ * Locations by platform:
+ * - Windows: %APPDATA%\odn-client\tunnels\
+ * - macOS:   ~/Library/Application Support/odn-client/tunnels/
+ * - Linux:   ~/.config/odn-client/tunnels/
+ */
 export function getConfigDir(): string {
-  const dir = path.join(os.homedir(), 'AppData', 'Roaming', 'odn-client', 'tunnels')
+  let baseDir: string
+  if (platform === 'win32') {
+    baseDir = path.join(os.homedir(), 'AppData', 'Roaming')
+  } else if (platform === 'darwin') {
+    baseDir = path.join(os.homedir(), 'Library', 'Application Support')
+  } else {
+    baseDir = path.join(os.homedir(), '.config')
+  }
+
+  const dir = path.join(baseDir, 'odn-client', 'tunnels')
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
   }
   return dir
 }
 
+// ─── Installation check ──────────────────────────────────────────────────────
+
+/**
+ * Checks whether the WireGuard CLI and tunnel manager are available.
+ * On Windows, checks for files on disk. On Linux/macOS, checks the system PATH.
+ */
 export function isWireGuardInstalled(): { wg: boolean; wgQuick: boolean } {
+  if (platform === 'win32') {
+    return {
+      wg: fs.existsSync(WG_CLI),
+      wgQuick: fs.existsSync(WG_EXE)
+    }
+  }
+  // On Unix, check if the binaries are reachable via PATH
   return {
-    wg: fs.existsSync(WG_CLI),
-    wgQuick: fs.existsSync(WG_EXE)
+    wg: commandExists('wg'),
+    wgQuick: commandExists('wg-quick')
   }
 }
 
+/** Returns true if a command is available on the system PATH. */
+function commandExists(cmd: string): boolean {
+  try {
+    execSync(`which ${cmd}`, { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ─── Connect / Disconnect ────────────────────────────────────────────────────
+
 /**
- * Connect by installing a WireGuard tunnel as a Windows service.
- * Requires the app to be running with administrator privileges.
+ * Connect a WireGuard tunnel.
+ * - Windows: installs the tunnel as a Windows service via wireguard.exe
+ * - Linux/macOS: brings the interface up via wg-quick
+ *
+ * Requires elevated privileges (Administrator on Windows, root/sudo on Unix).
  */
 export async function connectTunnel(configPath: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await execAsync(`"${WG_EXE}" /installtunnelservice "${configPath}"`)
+    if (platform === 'win32') {
+      await execAsync(`"${WG_EXE}" /installtunnelservice "${configPath}"`)
+    } else {
+      await execAsync(`sudo ${WG_EXE} up "${configPath}"`)
+    }
     return { success: true }
-  } catch (err: any) {
-    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
-    // Error 1073 = service already exists and is running
-    if (msg.includes('already exists') || msg.includes('1073')) {
-      return { success: true }
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string; message?: string }
+    const msg: string = e.stderr || e.stdout || e.message || 'Unknown error'
+
+    // Already connected — treat as success
+    if (platform === 'win32') {
+      // Error 1073 = Windows service already exists and is running
+      if (msg.includes('already exists') || msg.includes('1073')) {
+        return { success: true }
+      }
+    } else {
+      if (msg.includes('already exists') || msg.includes('already configured')) {
+        return { success: true }
+      }
     }
-    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') || msg.includes('administrator')) {
-      return { success: false, error: 'Administrator privileges required. Please run ODN Client as Administrator.' }
+
+    // Permission errors
+    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') ||
+        msg.includes('administrator') || msg.includes('Operation not permitted') ||
+        msg.includes('Permission denied')) {
+      const hint = platform === 'win32'
+        ? 'Administrator privileges required. Please run ODN Client as Administrator.'
+        : 'Root privileges required. Please run ODN Client with sudo.'
+      return { success: false, error: hint }
     }
+
     return { success: false, error: msg }
   }
 }
 
 /**
- * Disconnect by uninstalling the WireGuard tunnel Windows service.
- * Requires the app to be running with administrator privileges.
+ * Disconnect a WireGuard tunnel.
+ * - Windows: uninstalls the tunnel service via wireguard.exe
+ * - Linux/macOS: brings the interface down via wg-quick
+ *
+ * Requires elevated privileges (Administrator on Windows, root/sudo on Unix).
  */
 export async function disconnectTunnel(interfaceName: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await execAsync(`"${WG_EXE}" /uninstalltunnelservice "${interfaceName}"`)
+    if (platform === 'win32') {
+      await execAsync(`"${WG_EXE}" /uninstalltunnelservice "${interfaceName}"`)
+    } else {
+      await execAsync(`sudo ${WG_EXE} down "${interfaceName}"`)
+    }
     return { success: true }
-  } catch (err: any) {
-    const msg: string = err.stderr || err.stdout || err.message || 'Unknown error'
-    // Error 1060 = service does not exist (already stopped)
-    if (msg.includes('1060') || msg.includes('does not exist') || msg.includes('not found')) {
-      return { success: true }
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string; message?: string }
+    const msg: string = e.stderr || e.stdout || e.message || 'Unknown error'
+
+    // Already disconnected — treat as success
+    if (platform === 'win32') {
+      // Error 1060 = Windows service does not exist (already stopped)
+      if (msg.includes('1060') || msg.includes('does not exist') || msg.includes('not found')) {
+        return { success: true }
+      }
+    } else {
+      if (msg.includes('is not a WireGuard interface') || msg.includes('does not exist')) {
+        return { success: true }
+      }
     }
-    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') || msg.includes('administrator')) {
-      return { success: false, error: 'Administrator privileges required. Please run ODN Client as Administrator.' }
+
+    // Permission errors
+    if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') ||
+        msg.includes('administrator') || msg.includes('Operation not permitted') ||
+        msg.includes('Permission denied')) {
+      const hint = platform === 'win32'
+        ? 'Administrator privileges required. Please run ODN Client as Administrator.'
+        : 'Root privileges required. Please run ODN Client with sudo.'
+      return { success: false, error: hint }
     }
+
     return { success: false, error: msg }
   }
 }
 
+// ─── Status queries ──────────────────────────────────────────────────────────
+
 /**
  * Returns names of currently active WireGuard interfaces by querying the wg CLI.
+ * Works identically on all platforms (wg show interfaces).
  */
 export function getActiveInterfaces(): string[] {
   try {
-    const result = execSync(`"${WG_CLI}" show interfaces`, { stdio: 'pipe' }).toString().trim()
+    const cmd = platform === 'win32' ? `"${WG_CLI}" show interfaces` : `sudo ${WG_CLI} show interfaces`
+    const result = execSync(cmd, { stdio: 'pipe' }).toString().trim()
     if (!result) return []
     return result.split(/\s+/).filter(Boolean)
   } catch {
@@ -85,13 +221,14 @@ export function getActiveInterfaces(): string[] {
 
 /**
  * Parses `wg show all dump` output into structured interface data.
- * The dump format is tab-separated:
+ * The dump format is tab-separated and identical across all platforms:
  *   Interface line (5 cols): name, private-key, public-key, listen-port, fwmark
  *   Peer line (9 cols):      iface, pub-key, preshared-key, endpoint, allowed-ips, latest-handshake, rx-bytes, tx-bytes, keepalive
  */
 export function parseWgShowDump(): WireGuardInterface[] {
   try {
-    const output = execSync(`"${WG_CLI}" show all dump`, { stdio: 'pipe' }).toString().trim()
+    const cmd = platform === 'win32' ? `"${WG_CLI}" show all dump` : `sudo ${WG_CLI} show all dump`
+    const output = execSync(cmd, { stdio: 'pipe' }).toString().trim()
     if (!output) return []
 
     const interfaces: Map<string, WireGuardInterface> = new Map()
@@ -126,20 +263,30 @@ export function parseWgShowDump(): WireGuardInterface[] {
     }
 
     return Array.from(interfaces.values())
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse wg show dump:', err)
     return []
   }
 }
 
+/** Returns structured status data for all active WireGuard interfaces and their peers. */
 export function getWireGuardStatus(): WireGuardStatus {
   return { interfaces: parseWgShowDump() }
 }
 
+// ─── Config file operations ──────────────────────────────────────────────────
+
+/**
+ * Parses a WireGuard .conf file (INI format) into structured tunnel data.
+ * Extracts the [Interface] section (address, DNS, listen port) and all [Peer] sections.
+ * Returns a partial Tunnel object; missing fields will be empty arrays/undefined.
+ */
 export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
   try {
     const content = fs.readFileSync(configPath, 'utf-8')
     const parsed = parseIni(content)
 
+    // Extract [Interface] section fields
     const iface = parsed['Interface'] || {}
     const address = iface['Address']
       ? String(iface['Address']).split(',').map((s: string) => s.trim())
@@ -149,6 +296,8 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
       : []
     const listenPort = iface['ListenPort'] ? parseInt(String(iface['ListenPort'])) : undefined
 
+    // Extract [Peer] sections — the ini parser returns a single object for one peer
+    // or an array for multiple peers, so we normalize to an array
     const peers: WireGuardPeer[] = []
     const rawPeers = parsed['Peer']
     if (rawPeers) {
@@ -168,11 +317,13 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
     }
 
     return { address, dns, listenPort, peers }
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse tunnel config:', err)
     return {}
   }
 }
 
+/** Copies a WireGuard .conf file into the app's config directory, named by tunnel. */
 export function importConfigFile(sourcePath: string, tunnelName: string): string {
   const configDir = getConfigDir()
   const destPath = path.join(configDir, `${tunnelName}.conf`)
@@ -180,31 +331,48 @@ export function importConfigFile(sourcePath: string, tunnelName: string): string
   return destPath
 }
 
+/** Removes a tunnel's .conf file from disk. Silently succeeds if file is already gone. */
 export function deleteConfigFile(configPath: string): void {
   try {
     if (fs.existsSync(configPath)) {
       fs.unlinkSync(configPath)
     }
-  } catch {}
+  } catch (err) {
+    console.error('Failed to delete config file:', err)
+  }
 }
+
+// ─── Key generation ──────────────────────────────────────────────────────────
 
 /**
  * Generates a WireGuard key pair using the wg CLI.
- * On Windows, piping is done via PowerShell.
+ * On Windows, piping is done via PowerShell. On Unix, uses standard shell piping.
  */
 export function generateKeyPair(): { privateKey: string; publicKey: string } | null {
   try {
-    const privateKey = execSync(`"${WG_CLI}" genkey`, { stdio: 'pipe' }).toString().trim()
-    const publicKey = execSync(
-      `powershell -Command "echo '${privateKey}' | & '${WG_CLI}' pubkey"`,
-      { stdio: 'pipe' }
-    ).toString().trim()
-    return { privateKey, publicKey }
+    if (platform === 'win32') {
+      const privateKey = execSync(`"${WG_CLI}" genkey`, { stdio: 'pipe' }).toString().trim()
+      const publicKey = execSync(
+        `powershell -Command "echo '${privateKey}' | & '${WG_CLI}' pubkey"`,
+        { stdio: 'pipe' }
+      ).toString().trim()
+      return { privateKey, publicKey }
+    } else {
+      const privateKey = execSync(`${WG_CLI} genkey`, { stdio: 'pipe' }).toString().trim()
+      const publicKey = execSync(`echo '${privateKey}' | ${WG_CLI} pubkey`, {
+        stdio: 'pipe',
+        shell: '/bin/sh'
+      }).toString().trim()
+      return { privateKey, publicKey }
+    }
   } catch {
     return null
   }
 }
 
+// ─── Formatting utilities ────────────────────────────────────────────────────
+
+/** Converts a byte count to a human-readable string (e.g., 1536 -> "1.5 KiB"). */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -213,6 +381,7 @@ export function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
+/** Converts a Unix timestamp to a relative time string (e.g., "2m ago", "Never"). */
 export function formatHandshake(timestamp?: number): string {
   if (!timestamp) return 'Never'
   const diff = Math.floor(Date.now() / 1000) - timestamp

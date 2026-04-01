@@ -1,5 +1,13 @@
+/**
+ * Sidebar navigation component.
+ *
+ * Shows the app logo, navigation links (Dashboard, Tunnels, Settings),
+ * and a connection summary badge at the bottom. The Tunnels nav item
+ * displays a badge with the count of active tunnels.
+ */
+
 import type { Route, Tunnel } from '../types'
-import logo from '../assets/logo.png'
+import logo from '../assets/Logo.png'
 
 interface SidebarProps {
   route: Route
@@ -7,6 +15,7 @@ interface SidebarProps {
   tunnels: Tunnel[]
 }
 
+/** A single navigation item in the sidebar with optional badge (e.g., active tunnel count). */
 const NavItem = ({
   label,
   icon,
