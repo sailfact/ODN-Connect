@@ -1,3 +1,15 @@
+/**
+ * System tray integration for ODN Connect.
+ *
+ * Displays a small circle icon in the system tray that reflects connection status:
+ * - Green circle: at least one tunnel is connected
+ * - Grey circle: no tunnels connected
+ *
+ * The tray context menu shows all tunnels, their status, and quick-access links.
+ * Left-clicking the tray icon toggles window visibility.
+ * The menu auto-refreshes every 5 seconds to stay in sync with WireGuard state.
+ */
+
 import { app, Tray, Menu, nativeImage, BrowserWindow } from 'electron'
 import * as path from 'path'
 import { getActiveInterfaces } from './wireguard'
@@ -5,8 +17,11 @@ import { getTunnels } from './store'
 
 let tray: Tray | null = null
 
+/**
+ * Generates a 16x16 circle icon as a NativeImage using raw RGBA pixel data.
+ * Green when connected, grey when disconnected.
+ */
 function createIcon(connected: boolean): Electron.NativeImage {
-  // Create a simple colored circle icon using raw pixel data
   const size = 16
   const buf = Buffer.alloc(size * size * 4)
 
@@ -37,6 +52,7 @@ function createIcon(connected: boolean): Electron.NativeImage {
   return nativeImage.createFromBuffer(buf, { width: size, height: size })
 }
 
+/** Creates the system tray icon, sets up click behavior, and starts a 5-second refresh loop. */
 export function createTray(mainWindow: BrowserWindow): Tray {
   const activeInterfaces = getActiveInterfaces()
   const connected = activeInterfaces.length > 0
@@ -61,6 +77,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   return tray
 }
 
+/** Rebuilds the tray context menu with current tunnel status and connection state. */
 export function updateTrayMenu(mainWindow: BrowserWindow): void {
   if (!tray) return
 

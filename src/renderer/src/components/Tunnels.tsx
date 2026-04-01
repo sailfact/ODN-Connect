@@ -1,3 +1,12 @@
+/**
+ * Tunnels view — full tunnel management interface.
+ *
+ * Allows users to import WireGuard .conf files, view all configured tunnels,
+ * expand peer details, connect/disconnect, and delete tunnels.
+ * Each tunnel row is expandable to show per-peer information (endpoint,
+ * allowed IPs, handshake times, transfer stats).
+ */
+
 import { useState } from 'react'
 import type { Tunnel } from '../types'
 
@@ -6,6 +15,7 @@ interface TunnelsProps {
   onRefresh: () => Promise<void>
 }
 
+/** Displays details for a single WireGuard peer within an expanded tunnel row. */
 function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
   return (
     <div className="border-t border-border/50 px-4 py-3 flex items-start gap-3">
@@ -56,6 +66,7 @@ function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
   )
 }
 
+/** A single tunnel row with expandable peer list, connect/disconnect, and delete actions. */
 function TunnelRow({
   tunnel,
   onConnect,
@@ -293,7 +304,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
               <ul className="text-text-secondary text-xs space-y-1">
                 <li>• WireGuard config files end in .conf</li>
                 <li>• WireGuard must be installed from wireguard.com/install</li>
-                <li>• Run ODN Client as Administrator for tunnel management</li>
+                <li>• Run ODN Client with elevated privileges for tunnel management</li>
               </ul>
             </div>
           </div>
@@ -317,8 +328,8 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         <div className="mt-6 bg-accent-blue/5 border border-accent-blue/20 rounded-xl p-4 text-xs text-text-secondary">
           <p className="text-accent-blue font-semibold mb-1">How it works</p>
           <p>
-            ODN Client uses the WireGuard Windows service to manage tunnels. Configs are stored in{' '}
-            <code className="bg-bg-elevated px-1 rounded text-text-primary">%APPDATA%\odn-client\tunnels\</code>.
+            ODN Client uses WireGuard to manage tunnels. Configs are stored in your
+            application data directory.
           </p>
           <button
             onClick={() => window.api.openConfigDir()}
