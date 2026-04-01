@@ -1,8 +1,8 @@
 # ODN Connect
 
-A modern WireGuard desktop client for Windows — your own Tailscale.
+A modern WireGuard desktop client — your own Tailscale.
 
-ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tunnels without needing to use the command line. It wraps the native WireGuard Windows service with a modern Electron-based UI.
+ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tunnels without needing to use the command line. It wraps the native WireGuard CLI tools with a modern Electron-based UI.
 
 ## Features
 
@@ -11,6 +11,7 @@ ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tun
 - **System Tray** — Runs in the background with a status indicator (green = connected, grey = disconnected)
 - **Desktop Notifications** — Get notified when tunnels connect or disconnect
 - **Launch at Startup** — Optionally start ODN Connect when you log in
+- **Cross-Platform** — Supports Windows, macOS, and Linux
 - **Dark UI** — Purpose-built dark theme inspired by GitHub's design language
 
 ## Screenshots
@@ -19,16 +20,24 @@ ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tun
 
 ## Prerequisites
 
-- **Windows 10/11** (x64)
-- **WireGuard for Windows** — Download and install from [wireguard.com/install](https://www.wireguard.com/install/)
-- **Administrator privileges** — Required for managing WireGuard tunnel services
+- **WireGuard** — Must be installed on your system
+  - **Windows:** Download from [wireguard.com/install](https://www.wireguard.com/install/)
+  - **macOS:** `brew install wireguard-tools` or download from [wireguard.com/install](https://www.wireguard.com/install/)
+  - **Linux:** `sudo apt install wireguard` (Debian/Ubuntu) or your distro's package manager
+- **Elevated privileges** — Required for managing WireGuard tunnels
+  - **Windows:** Run as Administrator
+  - **macOS/Linux:** Run with sudo or configure passwordless sudo for `wg` and `wg-quick`
 - **Node.js 18+** — For development only
 
 ## Installation
 
 ### From Installer
 
-Download the latest `odn-client-<version>-setup.exe` from the [Releases](https://github.com/sailfact/ODN-Connect/releases) page and run it. The installer requires administrator privileges.
+Download the latest release for your platform from the [Releases](https://github.com/sailfact/ODN-Connect/releases) page:
+
+- **Windows:** `odn-client-<version>-setup.exe` (NSIS installer, requires Administrator)
+- **macOS:** `ODN-Client-<version>.dmg` (supports Intel and Apple Silicon)
+- **Linux:** `odn-client-<version>.AppImage` or `.deb`
 
 ### From Source
 
@@ -46,25 +55,29 @@ npm run dev
 # Build for production
 npm run build
 
-# Package as Windows installer
-npm run package
+# Package for your platform
+npm run package:win    # Windows (.exe)
+npm run package:mac    # macOS (.dmg)
+npm run package:linux  # Linux (.AppImage, .deb)
 ```
 
 ## Usage
 
-1. **Install WireGuard** from [wireguard.com/install](https://www.wireguard.com/install/) if not already installed
-2. **Run ODN Connect as Administrator** (right-click > Run as administrator)
+1. **Install WireGuard** for your platform (see Prerequisites above)
+2. **Run ODN Connect** with elevated privileges
 3. **Import a tunnel** — Go to Tunnels > Import .conf and select your WireGuard configuration file
 4. **Connect** — Click the Connect button on any tunnel card
 5. **Monitor** — The Dashboard shows real-time stats; the system tray icon reflects connection status
 
 ### Where are configs stored?
 
-Tunnel configuration files are stored in:
+Tunnel configuration files are stored in a platform-specific location:
 
-```
-%APPDATA%\odn-client\tunnels\
-```
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\odn-client\tunnels\` |
+| macOS | `~/Library/Application Support/odn-client/tunnels/` |
+| Linux | `~/.config/odn-client/tunnels/` |
 
 Application settings (launch at startup, tray behavior, etc.) are persisted via Electron Store.
 
@@ -105,18 +118,23 @@ src/
 | Styling | [Tailwind CSS](https://tailwindcss.com/) 3 |
 | Storage | [electron-store](https://github.com/sindresorhus/electron-store) |
 | Config Parsing | [ini](https://github.com/npm/ini) |
-| Packaging | [electron-builder](https://www.electron.build/) (NSIS) |
+| Packaging | [electron-builder](https://www.electron.build/) (NSIS, DMG, AppImage, deb) |
 
 ### How WireGuard Integration Works
 
-ODN Connect does **not** implement the WireGuard protocol itself. Instead, it shells out to the official WireGuard Windows binaries:
+ODN Connect does **not** implement the WireGuard protocol itself. Instead, it shells out to the official WireGuard CLI tools. The commands differ by platform:
 
-1. **Connecting** — Runs `wireguard.exe /installtunnelservice <config-path>` to install and start a tunnel as a Windows service
-2. **Disconnecting** — Runs `wireguard.exe /uninstalltunnelservice <interface-name>` to stop and remove the service
-3. **Status Polling** — Runs `wg.exe show all dump` every 5 seconds to get real-time peer stats (handshakes, transfer bytes, endpoints)
-4. **Interface Detection** — Runs `wg.exe show interfaces` to determine which tunnels are currently active
+| Operation | Windows | Linux / macOS |
+|-----------|---------|---------------|
+| Connect | `wireguard.exe /installtunnelservice <config>` | `sudo wg-quick up <config>` |
+| Disconnect | `wireguard.exe /uninstalltunnelservice <name>` | `sudo wg-quick down <name>` |
+| Status | `wg.exe show all dump` | `sudo wg show all dump` |
+| List interfaces | `wg.exe show interfaces` | `sudo wg show interfaces` |
+| Generate keys | `wg.exe genkey` + PowerShell piping | `wg genkey` + shell piping |
 
-All WireGuard binaries are expected at `C:\Program Files\WireGuard\`.
+**Binary locations:**
+- **Windows:** `C:\Program Files\WireGuard\` (wg.exe, wireguard.exe)
+- **Linux/macOS:** System PATH (wg, wg-quick)
 
 ### IPC Communication
 
@@ -146,8 +164,10 @@ npm run build
 # Preview production build
 npm run preview
 
-# Build + package as Windows NSIS installer
-npm run package
+# Package for a specific platform
+npm run package:win
+npm run package:mac
+npm run package:linux
 ```
 
 ### Project Scripts
@@ -158,6 +178,9 @@ npm run package
 | `npm run build` | Compile TypeScript and bundle with Vite |
 | `npm run preview` | Preview the production build locally |
 | `npm run package` | Build and package as a Windows installer (.exe) |
+| `npm run package:win` | Build and package for Windows (NSIS) |
+| `npm run package:mac` | Build and package for macOS (DMG) |
+| `npm run package:linux` | Build and package for Linux (AppImage, deb) |
 
 ## License
 

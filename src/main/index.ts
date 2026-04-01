@@ -21,7 +21,8 @@ import {
   generateKeyPair,
   isWireGuardInstalled,
   formatBytes,
-  formatHandshake
+  formatHandshake,
+  getConfigDir
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
 import type { Tunnel, AppSettings } from './types'
@@ -256,8 +257,7 @@ ipcMain.handle('app:version', () => {
 
 /** Open the tunnel config directory in the OS file explorer. */
 ipcMain.handle('app:open-config-dir', () => {
-  const dir = path.join(app.getPath('home'), '.config', 'odn-client', 'tunnels')
-  shell.openPath(dir)
+  shell.openPath(getConfigDir())
 })
 
 // ─── App Lifecycle ────────────────────────────────────────────────────────────

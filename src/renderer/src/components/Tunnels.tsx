@@ -304,7 +304,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
               <ul className="text-text-secondary text-xs space-y-1">
                 <li>• WireGuard config files end in .conf</li>
                 <li>• WireGuard must be installed from wireguard.com/install</li>
-                <li>• Run ODN Client as Administrator for tunnel management</li>
+                <li>• Run ODN Client with elevated privileges for tunnel management</li>
               </ul>
             </div>
           </div>
@@ -328,8 +328,8 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         <div className="mt-6 bg-accent-blue/5 border border-accent-blue/20 rounded-xl p-4 text-xs text-text-secondary">
           <p className="text-accent-blue font-semibold mb-1">How it works</p>
           <p>
-            ODN Client uses the WireGuard Windows service to manage tunnels. Configs are stored in{' '}
-            <code className="bg-bg-elevated px-1 rounded text-text-primary">%APPDATA%\odn-client\tunnels\</code>.
+            ODN Client uses WireGuard to manage tunnels. Configs are stored in your
+            application data directory.
           </p>
           <button
             onClick={() => window.api.openConfigDir()}

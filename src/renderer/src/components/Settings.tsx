@@ -149,10 +149,11 @@ export default function Settings({ settings, onSave }: SettingsProps) {
             WireGuard
           </h2>
           <div className="bg-bg-primary rounded-lg p-3 text-xs text-text-secondary">
-            <p className="font-semibold text-text-primary mb-1">Administrator privileges required</p>
+            <p className="font-semibold text-text-primary mb-1">Elevated privileges required</p>
             <p>
-              ODN Client uses the WireGuard Windows service to manage tunnels.
-              Connecting and disconnecting requires the app to be run as Administrator.
+              ODN Client uses WireGuard to manage tunnels.
+              Connecting and disconnecting requires elevated privileges
+              (Administrator on Windows, root/sudo on Linux and macOS).
             </p>
             <p className="mt-2">
               WireGuard must be installed from{' '}

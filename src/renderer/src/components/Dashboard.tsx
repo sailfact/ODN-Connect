@@ -131,8 +131,8 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
               <div>
                 <p className="text-accent-yellow font-semibold text-sm">WireGuard not fully installed</p>
                 <p className="text-text-secondary text-xs mt-1">
-                  {!wgInstalled.wg && 'wg.exe not found. '}
-                  {!wgInstalled.wgQuick && 'wireguard.exe not found. '}
+                  {!wgInstalled.wg && 'wg not found. '}
+                  {!wgInstalled.wgQuick && 'wg-quick / wireguard not found. '}
                   Download and install WireGuard from{' '}
                   <code className="bg-bg-elevated px-1 rounded text-text-primary">wireguard.com/install</code>
                 </p>
