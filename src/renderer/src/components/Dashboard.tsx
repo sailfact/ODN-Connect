@@ -17,6 +17,7 @@ interface DashboardProps {
   onConnect: (id: string) => Promise<void>
   onDisconnect: (id: string) => Promise<void>
   onInstallService: () => Promise<{ success: boolean; error?: string }>
+  onRefreshServiceStatus: () => Promise<void>
 }
 
 /** A small card displaying a single statistic with a label and optional subtitle. */
@@ -108,7 +109,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavigate, onConnect, onDisconnect, onInstallService }: DashboardProps) {
+export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavigate, onConnect, onDisconnect, onInstallService, onRefreshServiceStatus }: DashboardProps) {
   const [installingService, setInstallingService] = useState(false)
   const [serviceError, setServiceError] = useState<string | null>(null)
   const connected = tunnels.filter((t) => t.connected)
@@ -160,7 +161,7 @@ export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavig
                 {serviceError && (
                   <p className="text-accent-red text-xs mt-1">{serviceError}</p>
                 )}
-                {!serviceStatus.installed && (
+                {!serviceStatus.installed ? (
                   <button
                     className="mt-2 px-3 py-1 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
                     disabled={installingService}
@@ -175,6 +176,13 @@ export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavig
                     }}
                   >
                     {installingService ? 'Installing...' : 'Install Service'}
+                  </button>
+                ) : (
+                  <button
+                    className="mt-2 px-3 py-1 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+                    onClick={onRefreshServiceStatus}
+                  >
+                    Retry Connection
                   </button>
                 )}
               </div>
