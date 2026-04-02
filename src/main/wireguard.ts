@@ -52,6 +52,19 @@ export function getServiceClient(): TunnelServiceClient | null {
   return serviceClient
 }
 
+/**
+ * Attempt to reconnect to the tunnel service if not currently connected.
+ * Called periodically by the health monitor.
+ */
+export async function tryReconnectService(): Promise<boolean> {
+  if (serviceClient?.isConnected()) return true
+  if (serviceClient) {
+    serviceClient.disconnect()
+    serviceClient = null
+  }
+  return initServiceClient()
+}
+
 // ─── Platform-specific binary paths ──────────────────────────────────────────
 
 function resolveWgPaths(): { wgExe: string; wgCli: string } {

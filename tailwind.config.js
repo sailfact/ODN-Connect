@@ -5,26 +5,26 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          primary: '#07090f',
-          secondary: '#0b1018',
-          tertiary: '#0f1420',
-          elevated: '#162035'
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
+          elevated: 'var(--bg-elevated)'
         },
         accent: {
-          blue: '#00c8f0',
+          blue: 'var(--accent-blue)',
           green: '#22c55e',
           red: '#ef4444',
           yellow: '#eab308',
           purple: '#a855f7'
         },
         text: {
-          primary: '#e8eef6',
-          secondary: '#8ba8c4',
-          muted: '#4d6480'
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)'
         },
         border: {
-          DEFAULT: '#1a2840',
-          light: '#243551'
+          DEFAULT: 'var(--border)',
+          light: 'var(--border-light)'
         }
       },
       fontFamily: {

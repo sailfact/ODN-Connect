@@ -254,6 +254,11 @@ function startServer(): void {
   })
 
   server.listen(SERVICE_PIPE_PATH, () => {
+    // On Unix, make the socket world-readable/writable so the unprivileged
+    // Electron app can connect to the root-owned service socket.
+    if (platform !== 'win32') {
+      fs.chmodSync(SERVICE_PIPE_PATH, 0o666)
+    }
     console.log(`ODN Tunnel Service listening on ${SERVICE_PIPE_PATH}`)
   })
 

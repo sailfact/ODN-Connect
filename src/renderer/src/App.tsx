@@ -75,11 +75,37 @@ export default function App() {
     // Refresh tunnel status every 5 seconds
     const interval = setInterval(refreshTunnels, 5000)
 
+    // Refresh service status every 30 seconds
+    const serviceInterval = setInterval(async () => {
+      const svcStatus = await window.api.getServiceStatus()
+      setServiceStatus(svcStatus)
+    }, 30_000)
+
     return () => {
       cleanup()
       clearInterval(interval)
+      clearInterval(serviceInterval)
     }
   }, [refreshTunnels])
+
+  // Apply theme to the document based on settings
+  useEffect(() => {
+    if (!settings) return
+
+    const applyTheme = (theme: 'dark' | 'light') => {
+      document.documentElement.setAttribute('data-theme', theme)
+    }
+
+    if (settings.theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      applyTheme(mq.matches ? 'dark' : 'light')
+      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light')
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    } else {
+      applyTheme(settings.theme)
+    }
+  }, [settings?.theme])
 
   if (loading) {
     return (
@@ -120,6 +146,10 @@ export default function App() {
                 setServiceStatus({ connected: true, installed: true })
               }
               return result
+            }}
+            onRefreshServiceStatus={async () => {
+              const svcStatus = await window.api.getServiceStatus()
+              setServiceStatus(svcStatus)
             }}
           />
         )}

@@ -10,11 +10,14 @@
     "build": "electron-vite build && npm run build:service",
     "build:app": "electron-vite build",
     "build:service": "node -e \"require('esbuild').buildSync({entryPoints:['src/service/server.ts'],bundle:true,platform:'node',target:'node18',outfile:'out/service/server.js',external:['*']})\"",
+    "generate-icons": "node scripts/generate-icons.js",
     "preview": "electron-vite preview",
     "package": "npm run build && electron-builder --win",
     "package:win": "npm run build && electron-builder --win",
     "package:mac": "npm run build && electron-builder --mac",
-    "package:linux": "npm run build && electron-builder --linux"
+    "package:linux": "npm run build && electron-builder --linux",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "build": {
     "appId": "com.odn.connect",
@@ -30,7 +33,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "resources/icon.ico"
@@ -39,14 +44,20 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "resources/icon.icns",
       "category": "public.app-category.utilities"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "resources/icon.png",
       "category": "Network"
     },
@@ -69,16 +80,18 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
-    "esbuild": "^0.21.5",
     "electron": "^31.0.2",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
+    "esbuild": "^0.21.5",
+    "jsdom": "^29.0.1",
     "lucide-react": "^0.400.0",
     "postcss": "^8.4.39",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
-    "vite": "^5.3.3"
+    "vite": "^5.3.3",
+    "vitest": "^4.1.2"
   }
 }
