@@ -7,14 +7,16 @@
  */
 
 import { useState } from 'react'
-import type { Tunnel, Route } from '../types'
+import type { Tunnel, Route, ServiceStatus } from '../types'
 
 interface DashboardProps {
   tunnels: Tunnel[]
   wgInstalled: { wg: boolean; wgQuick: boolean } | null
+  serviceStatus: ServiceStatus | null
   onNavigate: (r: Route) => void
   onConnect: (id: string) => Promise<void>
   onDisconnect: (id: string) => Promise<void>
+  onInstallService: () => Promise<{ success: boolean; error?: string }>
 }
 
 /** A small card displaying a single statistic with a label and optional subtitle. */
@@ -106,7 +108,9 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect, onDisconnect }: DashboardProps) {
+export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavigate, onConnect, onDisconnect, onInstallService }: DashboardProps) {
+  const [installingService, setInstallingService] = useState(false)
+  const [serviceError, setServiceError] = useState<string | null>(null)
   const connected = tunnels.filter((t) => t.connected)
   const totalPeers = tunnels.reduce((acc, t) => acc + t.peers.length, 0)
   const totalRx = tunnels.reduce((acc, t) => acc + t.peers.reduce((a, p) => a + (p.rxBytes || 0), 0), 0)
@@ -136,6 +140,43 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
                   Download and install WireGuard from{' '}
                   <code className="bg-bg-elevated px-1 rounded text-text-primary">wireguard.com/install</code>
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tunnel service not running warning */}
+        {serviceStatus && !serviceStatus.connected && (
+          <div className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="text-orange-400 text-lg shrink-0">⚡</div>
+              <div className="flex-1">
+                <p className="text-orange-400 font-semibold text-sm">Tunnel Service Not Running</p>
+                <p className="text-text-secondary text-xs mt-1">
+                  {serviceStatus.installed
+                    ? 'The ODN Tunnel Service is installed but not responding. Try restarting it.'
+                    : 'Install the ODN Tunnel Service to connect tunnels without running as Administrator.'}
+                </p>
+                {serviceError && (
+                  <p className="text-accent-red text-xs mt-1">{serviceError}</p>
+                )}
+                {!serviceStatus.installed && (
+                  <button
+                    className="mt-2 px-3 py-1 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+                    disabled={installingService}
+                    onClick={async () => {
+                      setInstallingService(true)
+                      setServiceError(null)
+                      const result = await onInstallService()
+                      if (!result.success) {
+                        setServiceError(result.error || 'Failed to install service')
+                      }
+                      setInstallingService(false)
+                    }}
+                  >
+                    {installingService ? 'Installing...' : 'Install Service'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@
  * - Create and manage the BrowserWindow
  * - Register IPC handlers that bridge the renderer to WireGuard CLI operations
  * - Manage app lifecycle (tray, single-instance, close-to-tray)
+ * - Initialize the tunnel service client for non-elevated operation
  */
 
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
@@ -22,9 +23,12 @@ import {
   isWireGuardInstalled,
   formatBytes,
   formatHandshake,
-  getConfigDir
+  getConfigDir,
+  initServiceClient,
+  isServiceConnected
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
+import { installService, uninstallService, isServiceInstalled } from '../service/installer'
 import type { Tunnel, AppSettings } from './types'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
@@ -91,9 +95,9 @@ ipcMain.handle('wg:installed', () => {
 })
 
 /** Return all stored tunnels with their live connection status from WireGuard. */
-ipcMain.handle('tunnels:list', () => {
+ipcMain.handle('tunnels:list', async () => {
   const tunnels = getTunnels()
-  const active = getActiveInterfaces()
+  const active = await getActiveInterfaces()
   return tunnels.map((t) => ({ ...t, connected: active.includes(t.name) }))
 })
 
@@ -101,10 +105,10 @@ ipcMain.handle('tunnels:list', () => {
  * Return tunnels enriched with live WireGuard stats (peer transfer, handshake times).
  * This is polled every 5 seconds from the renderer to keep the UI current.
  */
-ipcMain.handle('tunnels:status', () => {
-  const status = getWireGuardStatus()
+ipcMain.handle('tunnels:status', async () => {
+  const status = await getWireGuardStatus()
   const tunnels = getTunnels()
-  const active = getActiveInterfaces()
+  const active = await getActiveInterfaces()
 
   // Merge live wg peer stats into stored tunnel data
   return tunnels.map((tunnel) => {
@@ -191,7 +195,6 @@ ipcMain.handle('tunnels:import', async () => {
 
   const sourcePath = result.filePaths[0]
   const baseName = path.basename(sourcePath, '.conf')
-  // Sanitize the filename to a safe tunnel/service name (alphanumeric, dash, underscore)
   const tunnelName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_')
 
   try {
@@ -224,7 +227,7 @@ ipcMain.handle('tunnels:delete', async (_, tunnelId: string) => {
   if (!tunnel) return { success: false, error: 'Tunnel not found' }
 
   // Disconnect first if connected
-  const active = getActiveInterfaces()
+  const active = await getActiveInterfaces()
   if (active.includes(tunnel.name)) {
     await disconnectTunnel(tunnel.name)
   }
@@ -260,14 +263,42 @@ ipcMain.handle('app:open-config-dir', () => {
   shell.openPath(getConfigDir())
 })
 
+// ─── Service management IPC ──────────────────────────────────────────────────
+
+/** Check if the tunnel service is running and reachable. */
+ipcMain.handle('service:status', async () => {
+  return {
+    connected: isServiceConnected(),
+    installed: await isServiceInstalled()
+  }
+})
+
+/** Install the tunnel service (one-time, prompts for elevation). */
+ipcMain.handle('service:install', async () => {
+  const result = await installService()
+  if (result.success) {
+    // Try to connect to the newly installed service
+    await initServiceClient()
+  }
+  return result
+})
+
+/** Uninstall the tunnel service. */
+ipcMain.handle('service:uninstall', async () => {
+  return uninstallService()
+})
+
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.odn.client')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Connect to the tunnel service before creating the window
+  await initServiceClient()
 
   const win = createWindow()
 
