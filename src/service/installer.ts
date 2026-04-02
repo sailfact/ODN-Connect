@@ -21,47 +21,58 @@ const SERVICE_DISPLAY_NAME = 'ODN Tunnel Service'
 const SERVICE_DESCRIPTION = 'Manages WireGuard tunnel connections for ODN Connect'
 
 /**
- * Returns the path to the service binary.
- * In production, it's bundled alongside the Electron app.
- * In development, it's in the project's out directory.
+ * Returns the path to the service script.
+ * Both dev and production use server.js — the service runs via Node.js
+ * (or Electron with ELECTRON_RUN_AS_NODE=1 in production).
  */
 export function getServiceBinaryPath(): string {
   const isDev = !process.resourcesPath || process.resourcesPath.includes('node_modules')
 
   if (isDev) {
-    // Development: use the compiled service in the out directory
     return path.join(process.cwd(), 'out', 'service', 'server.js')
   }
 
   // Production: bundled in app resources
-  if (platform === 'win32') {
-    return path.join(process.resourcesPath, 'service', 'odn-tunnel-service.exe')
-  }
-  return path.join(process.resourcesPath, 'service', 'odn-tunnel-service')
+  return path.join(process.resourcesPath, 'service', 'server.js')
 }
 
 /**
- * Returns the path to the Node.js binary for running the service script in dev mode.
+ * Returns the path to the runtime binary for running the service script.
+ * In dev, this is the Node.js binary. In production, this is the Electron
+ * binary (used with ELECTRON_RUN_AS_NODE=1 to act as plain Node.js).
  */
 function getNodePath(): string {
   return process.execPath
+}
+
+/** Whether we're running in a packaged (production) Electron app. */
+function isProduction(): boolean {
+  return !!process.resourcesPath && !process.resourcesPath.includes('node_modules')
 }
 
 // ─── Windows ─────────────────────────────────────────────────────────────────
 
 async function installWindows(): Promise<void> {
   const binPath = getServiceBinaryPath()
-  const isScript = binPath.endsWith('.js')
+  const nodePath = getNodePath()
 
-  // Build the command the service will run
-  const binPathCmd = isScript
-    ? `"${getNodePath()}" "${binPath}"`
-    : `"${binPath}"`
+  // In production, we use a wrapper script that sets ELECTRON_RUN_AS_NODE=1
+  // so the Electron binary acts as plain Node.js for the service.
+  if (isProduction()) {
+    const wrapperPath = path.join(process.resourcesPath, 'service-wrapper.cmd')
+    const wrapperContent = `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${nodePath}" "${binPath}"\r\n`
+    fs.writeFileSync(wrapperPath, wrapperContent)
 
-  // Create the service using sc.exe (runs with the current elevation)
-  await execAsync(
-    `sc create ${SERVICE_NAME} binPath= ${binPathCmd} start= auto DisplayName= "${SERVICE_DISPLAY_NAME}"`
-  )
+    await execAsync(
+      `sc create ${SERVICE_NAME} binPath= "${wrapperPath}" start= auto DisplayName= "${SERVICE_DISPLAY_NAME}"`
+    )
+  } else {
+    // Dev mode: use node directly
+    await execAsync(
+      `sc create ${SERVICE_NAME} binPath= "${nodePath}" "${binPath}" start= auto DisplayName= "${SERVICE_DISPLAY_NAME}"`
+    )
+  }
+
   await execAsync(`sc description ${SERVICE_NAME} "${SERVICE_DESCRIPTION}"`)
   await execAsync(`sc start ${SERVICE_NAME}`)
 }
@@ -88,12 +99,17 @@ function getLaunchdPlistPath(): string {
 
 async function installMacOS(): Promise<void> {
   const binPath = getServiceBinaryPath()
-  const isScript = binPath.endsWith('.js')
+  const nodePath = getNodePath()
   const plistPath = getLaunchdPlistPath()
 
-  const programArgs = isScript
-    ? `    <array>\n      <string>${getNodePath()}</string>\n      <string>${binPath}</string>\n    </array>`
-    : `    <array>\n      <string>${binPath}</string>\n    </array>`
+  // In production, set ELECTRON_RUN_AS_NODE=1 so Electron acts as Node.js
+  const envSection = isProduction()
+    ? `    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ELECTRON_RUN_AS_NODE</key>
+        <string>1</string>
+    </dict>`
+    : ''
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -102,7 +118,11 @@ async function installMacOS(): Promise<void> {
     <key>Label</key>
     <string>com.odn.tunnel-service</string>
     <key>ProgramArguments</key>
-${programArgs}
+    <array>
+      <string>${nodePath}</string>
+      <string>${binPath}</string>
+    </array>
+${envSection}
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -114,7 +134,6 @@ ${programArgs}
 </dict>
 </plist>`
 
-  // Write plist and load (requires sudo — will prompt via osascript)
   const tmpPlist = path.join(os.tmpdir(), 'com.odn.tunnel-service.plist')
   fs.writeFileSync(tmpPlist, plist)
 
@@ -146,11 +165,10 @@ const SYSTEMD_UNIT_PATH = '/etc/systemd/system/odn-tunnel-service.service'
 
 async function installLinux(): Promise<void> {
   const binPath = getServiceBinaryPath()
-  const isScript = binPath.endsWith('.js')
+  const nodePath = getNodePath()
 
-  const execStart = isScript
-    ? `${getNodePath()} ${binPath}`
-    : binPath
+  // In production, set ELECTRON_RUN_AS_NODE=1 so Electron acts as Node.js
+  const envLine = isProduction() ? 'Environment=ELECTRON_RUN_AS_NODE=1' : ''
 
   const unit = `[Unit]
 Description=${SERVICE_DESCRIPTION}
@@ -158,7 +176,8 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${execStart}
+ExecStart=${nodePath} ${binPath}
+${envLine}
 Restart=always
 RestartSec=5
 
@@ -169,7 +188,6 @@ WantedBy=multi-user.target
   const tmpUnit = path.join(os.tmpdir(), 'odn-tunnel-service.service')
   fs.writeFileSync(tmpUnit, unit)
 
-  // pkexec provides a graphical privilege prompt on Linux
   await execAsync(
     `pkexec sh -c "cp ${tmpUnit} ${SYSTEMD_UNIT_PATH} && systemctl daemon-reload && systemctl enable --now odn-tunnel-service"`
   )

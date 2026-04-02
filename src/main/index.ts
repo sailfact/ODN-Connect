@@ -25,7 +25,8 @@ import {
   formatHandshake,
   getConfigDir,
   initServiceClient,
-  isServiceConnected
+  isServiceConnected,
+  tryReconnectService
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
 import { installService, uninstallService, isServiceInstalled } from '../service/installer'
@@ -267,6 +268,11 @@ ipcMain.handle('app:open-config-dir', () => {
 
 /** Check if the tunnel service is running and reachable. */
 ipcMain.handle('service:status', async () => {
+  const connected = isServiceConnected()
+  // If not connected, try to reconnect in the background
+  if (!connected) {
+    tryReconnectService().catch(() => {})
+  }
   return {
     connected: isServiceConnected(),
     installed: await isServiceInstalled()
@@ -299,6 +305,13 @@ app.whenReady().then(async () => {
 
   // Connect to the tunnel service before creating the window
   await initServiceClient()
+
+  // Periodically attempt to reconnect to the service if it goes down
+  setInterval(() => {
+    if (!isServiceConnected()) {
+      tryReconnectService().catch(() => {})
+    }
+  }, 30_000)
 
   const win = createWindow()
 
