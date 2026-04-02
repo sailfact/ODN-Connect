@@ -7,7 +7,9 @@
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && npm run build:service",
+    "build:app": "electron-vite build",
+    "build:service": "node -e \"require('esbuild').buildSync({entryPoints:['src/service/server.ts'],bundle:true,platform:'node',target:'node18',outfile:'out/service/server.js',external:['*']})\"",
     "preview": "electron-vite preview",
     "package": "npm run build && electron-builder --win",
     "package:win": "npm run build && electron-builder --win",
@@ -67,6 +69,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "esbuild": "^0.21.5",
     "electron": "^31.0.2",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
