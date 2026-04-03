@@ -12,12 +12,12 @@
 
 import * as net from 'net'
 import * as path from 'path'
-import * as os from 'os'
 import * as fs from 'fs'
 import { execFile, execSync } from 'child_process'
 import { promisify } from 'util'
 import type { ServiceRequest, ServiceResponse } from './protocol'
 import { SERVICE_PIPE_PATH } from './protocol'
+import { getConfigDirPath } from '../shared/config-dir'
 
 const execFileAsync = promisify(execFile)
 const platform = process.platform
@@ -48,27 +48,13 @@ function resolveUnixBinary(name: string): string {
 
 const { wgExe, wgCli } = resolveWgPaths()
 
-// ─── Config directory (must match the Electron app's getConfigDir) ───────────
-
-function getConfigDir(): string {
-  let baseDir: string
-  if (platform === 'win32') {
-    baseDir = path.join(os.homedir(), 'AppData', 'Roaming')
-  } else if (platform === 'darwin') {
-    baseDir = path.join(os.homedir(), 'Library', 'Application Support')
-  } else {
-    baseDir = path.join(os.homedir(), '.config')
-  }
-  return path.join(baseDir, 'odn-client', 'tunnels')
-}
-
 // ─── Input validation ────────────────────────────────────────────────────────
 
 const SAFE_NAME = /^[a-zA-Z0-9_-]+$/
 
 function validateConfigPath(configPath: string): void {
   const resolved = path.resolve(configPath)
-  const configDir = path.resolve(getConfigDir())
+  const configDir = path.resolve(getConfigDirPath())
   if (!resolved.startsWith(configDir + path.sep) && resolved !== configDir) {
     throw new Error('Config path is outside the allowed directory')
   }
