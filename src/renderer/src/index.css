@@ -4,13 +4,18 @@
 
 /* ─── Theme Variables ────────────────────────────────────────────────────── */
 
+/* Midnight — refined dark (default) */
 :root,
-[data-theme='dark'] {
+[data-theme='midnight'] {
   --bg-primary: #07090f;
   --bg-secondary: #0b1018;
   --bg-tertiary: #0f1420;
   --bg-elevated: #162035;
-  --accent-blue: #00c8f0;
+  --accent-primary: #00c8f0;
+  --accent-success: #22c55e;
+  --accent-danger: #ef4444;
+  --accent-warning: #eab308;
+  --accent-info: #a855f7;
   --text-primary: #e8eef6;
   --text-secondary: #8ba8c4;
   --text-muted: #4d6480;
@@ -20,19 +25,64 @@
   --scrollbar-thumb-hover: #3b5275;
 }
 
-[data-theme='light'] {
-  --bg-primary: #f8fafc;
+/* Arctic Light — clean professional light */
+[data-theme='arctic-light'] {
+  --bg-primary: #f4f6f9;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --bg-elevated: #e2e8f0;
-  --accent-blue: #0891b2;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --border: #e2e8f0;
-  --border-light: #cbd5e1;
-  --scrollbar-thumb: #cbd5e1;
-  --scrollbar-thumb-hover: #94a3b8;
+  --bg-tertiary: #ebeef3;
+  --bg-elevated: #dfe3eb;
+  --accent-primary: #0078d4;
+  --accent-success: #16a34a;
+  --accent-danger: #dc2626;
+  --accent-warning: #ca8a04;
+  --accent-info: #7c3aed;
+  --text-primary: #1a1d23;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --border: #d1d5db;
+  --border-light: #e5e7eb;
+  --scrollbar-thumb: #d1d5db;
+  --scrollbar-thumb-hover: #9ca3af;
+}
+
+/* Slate Dusk — Catppuccin-inspired */
+[data-theme='slate-dusk'] {
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #262637;
+  --bg-tertiary: #2e2e42;
+  --bg-elevated: #3a3a52;
+  --accent-primary: #89b4fa;
+  --accent-success: #a6e3a1;
+  --accent-danger: #f38ba8;
+  --accent-warning: #f9e2af;
+  --accent-info: #cba6f7;
+  --text-primary: #cdd6f4;
+  --text-secondary: #a6adc8;
+  --text-muted: #6c7086;
+  --border: #363650;
+  --border-light: #45455e;
+  --scrollbar-thumb: #45455e;
+  --scrollbar-thumb-hover: #6c7086;
+}
+
+/* Nord Frost — blue-tinted charcoal */
+[data-theme='nord-frost'] {
+  --bg-primary: #2e3440;
+  --bg-secondary: #3b4252;
+  --bg-tertiary: #434c5e;
+  --bg-elevated: #4c566a;
+  --accent-primary: #88c0d0;
+  --accent-success: #a3be8c;
+  --accent-danger: #bf616a;
+  --accent-warning: #ebcb8b;
+  --accent-info: #b48ead;
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #7b88a1;
+  --border: #4c566a;
+  --border-light: #5a657a;
+  --scrollbar-thumb: #5a657a;
+  --scrollbar-thumb-hover: #7b88a1;
 }
 
 /* ─── Base ───────────────────────────────────────────────────────────────── */
@@ -85,13 +135,13 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply bg-accent-blue hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 text-sm;
+    @apply bg-accent-blue hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm;
   }
   .btn-secondary {
     @apply bg-bg-elevated hover:bg-bg-tertiary border border-border text-text-primary font-medium px-4 py-2 rounded-lg transition-colors duration-150 text-sm;
   }
   .btn-danger {
-    @apply bg-accent-red hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 text-sm;
+    @apply bg-accent-red hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm;
   }
   .btn-ghost {
     @apply hover:bg-bg-elevated text-text-secondary hover:text-text-primary px-4 py-2 rounded-lg transition-colors duration-150 text-sm;

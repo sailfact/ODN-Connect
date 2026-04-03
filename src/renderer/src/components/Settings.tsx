@@ -52,37 +52,119 @@ function Toggle({
   )
 }
 
-/** Reusable dropdown select field with a label and optional description. */
-function SelectField({
-  label,
-  description,
+const THEMES: {
+  value: AppSettings['theme']
+  label: string
+  description: string
+  swatch: { bg: string; secondary: string; accent: string; text: string }
+}[] = [
+  {
+    value: 'midnight',
+    label: 'Midnight',
+    description: 'Deep dark with cyan accent',
+    swatch: { bg: '#07090f', secondary: '#0b1018', accent: '#00c8f0', text: '#e8eef6' }
+  },
+  {
+    value: 'arctic-light',
+    label: 'Arctic Light',
+    description: 'Clean professional light',
+    swatch: { bg: '#f4f6f9', secondary: '#ffffff', accent: '#0078d4', text: '#1a1d23' }
+  },
+  {
+    value: 'slate-dusk',
+    label: 'Slate Dusk',
+    description: 'Catppuccin-inspired purple',
+    swatch: { bg: '#1e1e2e', secondary: '#262637', accent: '#89b4fa', text: '#cdd6f4' }
+  },
+  {
+    value: 'nord-frost',
+    label: 'Nord Frost',
+    description: 'Polar night with Aurora',
+    swatch: { bg: '#2e3440', secondary: '#3b4252', accent: '#88c0d0', text: '#eceff4' }
+  },
+  {
+    value: 'system',
+    label: 'System',
+    description: 'Follows OS preference',
+    swatch: { bg: '#1e293b', secondary: '#f8fafc', accent: '#64748b', text: '#94a3b8' }
+  }
+]
+
+/** Visual theme card selector. */
+function ThemeSelector({
   value,
-  options,
   onChange
 }: {
-  label: string
-  description?: string
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (v: string) => void
+  value: AppSettings['theme']
+  onChange: (v: AppSettings['theme']) => void
 }) {
   return (
-    <div className="py-3 flex items-center justify-between gap-4">
-      <div>
-        <p className="text-text-primary text-sm font-medium">{label}</p>
-        {description && <p className="text-text-secondary text-xs mt-0.5">{description}</p>}
+    <div className="py-3">
+      <p className="text-text-primary text-sm font-medium mb-3">Theme</p>
+      <div className="grid grid-cols-5 gap-2">
+        {THEMES.map((theme) => {
+          const isSelected = value === theme.value
+          const isSystem = theme.value === 'system'
+          return (
+            <button
+              key={theme.value}
+              onClick={() => onChange(theme.value)}
+              className={`flex flex-col rounded-lg overflow-hidden border-2 transition-all ${
+                isSelected
+                  ? 'border-accent-blue scale-[1.02]'
+                  : 'border-border hover:border-border-light'
+              }`}
+            >
+              {/* Swatch preview */}
+              {isSystem ? (
+                <div className="h-14 flex">
+                  <div className="w-1/2 flex flex-col gap-1 p-1.5" style={{ background: '#07090f' }}>
+                    <div className="h-1.5 rounded-full w-full" style={{ background: '#0b1018' }} />
+                    <div className="h-1.5 rounded-full w-3/4" style={{ background: '#0b1018' }} />
+                    <div className="h-2 rounded-sm w-full mt-auto" style={{ background: '#00c8f0' }} />
+                  </div>
+                  <div className="w-1/2 flex flex-col gap-1 p-1.5" style={{ background: '#f4f6f9' }}>
+                    <div className="h-1.5 rounded-full w-full" style={{ background: '#dfe3eb' }} />
+                    <div className="h-1.5 rounded-full w-3/4" style={{ background: '#dfe3eb' }} />
+                    <div className="h-2 rounded-sm w-full mt-auto" style={{ background: '#0078d4' }} />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="h-14 flex flex-col gap-1 p-1.5"
+                  style={{ background: theme.swatch.bg }}
+                >
+                  <div
+                    className="h-1.5 rounded-full w-full"
+                    style={{ background: theme.swatch.secondary }}
+                  />
+                  <div
+                    className="h-1.5 rounded-full w-3/4"
+                    style={{ background: theme.swatch.secondary }}
+                  />
+                  <div className="flex gap-1 mt-auto">
+                    <div
+                      className="h-2 rounded-sm flex-1"
+                      style={{ background: theme.swatch.accent }}
+                    />
+                    <div
+                      className="h-2 rounded-sm w-3"
+                      style={{ background: theme.swatch.text, opacity: 0.3 }}
+                    />
+                  </div>
+                </div>
+              )}
+              {/* Label */}
+              <div className="bg-bg-elevated px-1.5 py-1.5 text-left">
+                <p className="text-text-primary text-xs font-medium leading-tight">{theme.label}</p>
+                <p className="text-text-muted text-[10px] leading-tight mt-0.5 line-clamp-1">
+                  {theme.description}
+                </p>
+              </div>
+            </button>
+          )
+        })}
       </div>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="input w-40 shrink-0 bg-bg-elevated cursor-pointer"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
     </div>
   )
 }
@@ -167,15 +249,9 @@ export default function Settings({ settings, onSave }: SettingsProps) {
           <h2 className="text-text-primary font-semibold text-sm mb-3 pb-3 border-b border-border">
             Appearance
           </h2>
-          <SelectField
-            label="Theme"
+          <ThemeSelector
             value={local.theme}
-            options={[
-              { value: 'dark', label: 'Dark' },
-              { value: 'light', label: 'Light' },
-              { value: 'system', label: 'System' }
-            ]}
-            onChange={(v) => set('theme', v as AppSettings['theme'])}
+            onChange={(v) => set('theme', v)}
           />
         </div>
 

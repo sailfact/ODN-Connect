@@ -13,7 +13,7 @@ const defaultSettings: AppSettings = {
   launchAtStartup: false,
   minimizeToTray: true,
   showNotifications: true,
-  theme: 'dark'
+  theme: 'midnight'
 }
 
 const store = new Store<AppStore>({

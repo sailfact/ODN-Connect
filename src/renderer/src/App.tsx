@@ -92,14 +92,15 @@ export default function App() {
   useEffect(() => {
     if (!settings) return
 
-    const applyTheme = (theme: 'dark' | 'light') => {
+    type NamedTheme = 'midnight' | 'arctic-light' | 'slate-dusk' | 'nord-frost'
+    const applyTheme = (theme: NamedTheme) => {
       document.documentElement.setAttribute('data-theme', theme)
     }
 
     if (settings.theme === 'system') {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      applyTheme(mq.matches ? 'dark' : 'light')
-      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light')
+      applyTheme(mq.matches ? 'midnight' : 'arctic-light')
+      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'midnight' : 'arctic-light')
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)
     } else {

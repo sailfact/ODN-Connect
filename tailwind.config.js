@@ -11,11 +11,11 @@ module.exports = {
           elevated: 'var(--bg-elevated)'
         },
         accent: {
-          blue: 'var(--accent-blue)',
-          green: '#22c55e',
-          red: '#ef4444',
-          yellow: '#eab308',
-          purple: '#a855f7'
+          blue: 'var(--accent-primary)',
+          green: 'var(--accent-success)',
+          red: 'var(--accent-danger)',
+          yellow: 'var(--accent-warning)',
+          purple: 'var(--accent-info)'
         },
         text: {
           primary: 'var(--text-primary)',

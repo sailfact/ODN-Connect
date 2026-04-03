@@ -60,7 +60,7 @@ export interface AppSettings {
   launchAtStartup: boolean
   minimizeToTray: boolean
   showNotifications: boolean
-  theme: 'dark' | 'light' | 'system'
+  theme: 'midnight' | 'arctic-light' | 'slate-dusk' | 'nord-frost' | 'system'
 }
 
 /** Top-level shape of the electron-store JSON file. */
