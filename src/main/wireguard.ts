@@ -20,6 +20,7 @@ import * as os from 'os'
 import { parse as parseIni } from 'ini'
 import type { Tunnel, WireGuardPeer, WireGuardInterface, WireGuardStatus } from './types'
 import { TunnelServiceClient } from '../service/client'
+import { getConfigDirPath } from '../shared/config-dir'
 
 const execAsync = promisify(exec)
 const platform = process.platform
@@ -81,10 +82,11 @@ function resolveWgPaths(): { wgExe: string; wgCli: string } {
   }
 }
 
+const { wgExe, wgCli } = resolveWgPaths()
 /** Path to wireguard.exe (Windows) or wg-quick (Linux/macOS) — manages tunnel lifecycle. */
-export const WG_EXE = resolveWgPaths().wgExe
+export const WG_EXE = wgExe
 /** Path to wg.exe (Windows) or wg (Linux/macOS) — queries interface status and generates keys. */
-export const WG_CLI = resolveWgPaths().wgCli
+export const WG_CLI = wgCli
 
 // ─── Config directory ────────────────────────────────────────────────────────
 
@@ -93,16 +95,7 @@ export const WG_CLI = resolveWgPaths().wgCli
  * Creates the directory if it doesn't exist.
  */
 export function getConfigDir(): string {
-  let baseDir: string
-  if (platform === 'win32') {
-    baseDir = path.join(os.homedir(), 'AppData', 'Roaming')
-  } else if (platform === 'darwin') {
-    baseDir = path.join(os.homedir(), 'Library', 'Application Support')
-  } else {
-    baseDir = path.join(os.homedir(), '.config')
-  }
-
-  const dir = path.join(baseDir, 'odn-client', 'tunnels')
+  const dir = getConfigDirPath()
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
   }

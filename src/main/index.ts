@@ -216,8 +216,8 @@ ipcMain.handle('tunnels:import', async () => {
 
     saveTunnel(tunnel)
     return { success: true, tunnel }
-  } catch (err: any) {
-    return { success: false, error: err.message }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
 
