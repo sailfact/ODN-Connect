@@ -166,6 +166,13 @@ function handleStatus(): unknown {
   }
 }
 
+async function handleSyncConf(interfaceName: string, configPath: string): Promise<ServiceResponse['data']> {
+  validateInterfaceName(interfaceName)
+  validateConfigPath(configPath)
+  await execFileAsync(wgCli, ['syncconf', interfaceName, configPath])
+  return { synced: true }
+}
+
 // ─── Request dispatcher ──────────────────────────────────────────────────────
 
 async function handleRequest(req: ServiceRequest): Promise<ServiceResponse> {
@@ -187,6 +194,14 @@ async function handleRequest(req: ServiceRequest): Promise<ServiceResponse> {
           return { id: req.id, success: false, error: 'Missing interfaceName argument' }
         }
         const data = await handleDisconnect(req.args.interfaceName)
+        return { id: req.id, success: true, data }
+      }
+
+      case 'syncconf': {
+        if (!req.args?.interfaceName || !req.args?.configPath) {
+          return { id: req.id, success: false, error: 'Missing interfaceName or configPath argument' }
+        }
+        const data = await handleSyncConf(req.args.interfaceName, req.args.configPath)
         return { id: req.id, success: true, data }
       }
 

@@ -2,6 +2,7 @@
  * Settings view — configure ODN Connect behavior and preferences.
  *
  * Sections:
+ * - VPN Server: connection status, sync controls, connect/disconnect
  * - General: launch at startup, minimize to tray, notifications
  * - WireGuard: info about admin privileges and installation
  * - Appearance: theme selection (dark/light/system)
@@ -11,11 +12,16 @@
  */
 
 import { useState } from 'react'
-import type { AppSettings } from '../types'
+import type { AppSettings, ServerProfile, SyncStatus } from '../types'
 
 interface SettingsProps {
   settings: AppSettings
+  serverProfile: ServerProfile | null
+  syncStatus: SyncStatus | null
   onSave: (s: AppSettings) => Promise<void>
+  onSyncNow: () => Promise<void>
+  onLogoutServer: () => Promise<void>
+  onConnectServer: () => void
 }
 
 /** Reusable toggle switch component with a label and optional description. */
@@ -169,10 +175,32 @@ function ThemeSelector({
   )
 }
 
-export default function Settings({ settings, onSave }: SettingsProps) {
+function formatRelativeTime(ts: number): string {
+  const diffMs = Date.now() - ts
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 10) return 'just now'
+  if (diffSec < 60) return `${diffSec} seconds ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`
+  const diffDay = Math.floor(diffHr / 24)
+  return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`
+}
+
+export default function Settings({
+  settings,
+  serverProfile,
+  syncStatus,
+  onSave,
+  onSyncNow,
+  onLogoutServer,
+  onConnectServer
+}: SettingsProps) {
   const [local, setLocal] = useState<AppSettings>({ ...settings })
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [syncingNow, setSyncingNow] = useState(false)
 
   const set = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setLocal((prev) => ({ ...prev, [key]: value }))
@@ -190,12 +218,75 @@ export default function Settings({ settings, onSave }: SettingsProps) {
     }
   }
 
+  const handleSyncNow = async () => {
+    setSyncingNow(true)
+    try {
+      await onSyncNow()
+    } finally {
+      setSyncingNow(false)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-6">
         <div className="mb-6">
           <h1 className="text-text-primary text-xl font-bold">Settings</h1>
           <p className="text-text-secondary text-sm mt-1">Configure ODN Client behavior</p>
+        </div>
+
+        {/* VPN Server */}
+        <div className="card mb-4">
+          <h2 className="text-text-primary font-semibold text-sm mb-3 pb-3 border-b border-border">
+            VPN Server
+          </h2>
+          {serverProfile ? (
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Server</span>
+                <span className="text-text-primary font-medium">{serverProfile.serverName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">URL</span>
+                <span className="text-text-muted font-mono text-xs">{serverProfile.apiBaseUrl}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-secondary">Last sync</span>
+                <span className="text-text-primary">
+                  {syncStatus?.lastSyncAt
+                    ? formatRelativeTime(syncStatus.lastSyncAt)
+                    : 'Never'}
+                </span>
+              </div>
+              {syncStatus?.error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-xs text-red-400">
+                  {syncStatus.error}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleSyncNow}
+                  disabled={syncStatus?.syncing || syncingNow}
+                  className="btn-secondary text-xs disabled:opacity-50"
+                >
+                  {syncStatus?.syncing || syncingNow ? 'Syncing...' : 'Sync Now'}
+                </button>
+                <button
+                  onClick={onLogoutServer}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors px-2"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-text-secondary text-sm">No server connected</p>
+              <button onClick={onConnectServer} className="btn-primary text-xs">
+                Connect to Server
+              </button>
+            </div>
+          )}
         </div>
 
         {/* General */}

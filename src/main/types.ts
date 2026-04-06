@@ -67,4 +67,55 @@ export interface AppSettings {
 export interface AppStore {
   tunnels: Tunnel[]
   settings: AppSettings
+  serverProfile?: ServerProfile
+}
+
+/** Persistent server connection profile — stored in electron-store, never sent to renderer. */
+export interface ServerProfile {
+  apiBaseUrl: string
+  serverName: string
+  serverPublicKey: string   // from server-info, needed for .conf generation
+  serverEndpoint: string    // host:port, from server-info
+  accessToken: string
+  refreshToken: string
+  tokenExpiresAt: number    // ms since epoch
+}
+
+/** Sync loop status exposed to the renderer via window.api.getSyncStatus(). */
+export interface SyncStatus {
+  lastSyncAt: number | null
+  syncing: boolean
+  error: string | null
+}
+
+// ─── Server API response shapes (snake_case — matches server exactly) ─────────
+
+export interface ServerInfo {
+  server_name: string
+  public_key: string
+  endpoint: string
+  dns: string[]
+  allowed_ips: string
+  api_base_url: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: 'bearer'
+  expires_in: number
+}
+
+export interface PeerOut {
+  id: string
+  name: string
+  public_key: string
+  allowed_ips: string
+  assigned_ip: string
+  dns: string | null
+  enabled: boolean
+  last_handshake: string | null
+  client_label: string | null
+  created_at: string
+  preshared_key?: string
 }

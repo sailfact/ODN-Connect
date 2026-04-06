@@ -197,4 +197,14 @@ export class TunnelServiceClient {
       return { interfaces: [] }
     }
   }
+
+  async syncConf(interfaceName: string, configPath: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.send('syncconf', { interfaceName, configPath })
+      if (!res.success) return { success: false, error: res.error }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
 }

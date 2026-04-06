@@ -6,7 +6,7 @@
  */
 
 /** Commands the service accepts. */
-export type ServiceCommand = 'connect' | 'disconnect' | 'status' | 'interfaces' | 'ping'
+export type ServiceCommand = 'connect' | 'disconnect' | 'status' | 'interfaces' | 'ping' | 'syncconf'
 
 /** A request sent from the Electron app to the tunnel service. */
 export interface ServiceRequest {
@@ -16,9 +16,9 @@ export interface ServiceRequest {
   command: ServiceCommand
   /** Command-specific arguments. */
   args?: {
-    /** Absolute path to a .conf file (for 'connect'). */
+    /** Absolute path to a .conf file (for 'connect' and 'syncconf'). */
     configPath?: string
-    /** WireGuard interface/tunnel name (for 'disconnect'). */
+    /** WireGuard interface/tunnel name (for 'disconnect' and 'syncconf'). */
     interfaceName?: string
   }
 }

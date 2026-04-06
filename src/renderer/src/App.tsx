@@ -1,9 +1,9 @@
 /**
  * Root application component.
  *
- * Manages top-level state (current route, tunnels, settings) and orchestrates
- * communication with the main process via `window.api`. Tunnel status is polled
- * every 5 seconds to keep the UI in sync with WireGuard's live state.
+ * Manages top-level state (current route, tunnels, settings, server profile) and
+ * orchestrates communication with the main process via `window.api`. Tunnel status
+ * is polled every 5 seconds to keep the UI in sync with WireGuard's live state.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -11,7 +11,8 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
 import Tunnels from './components/Tunnels'
 import Settings from './components/Settings'
-import type { Route, Tunnel, AppSettings, ServiceStatus } from './types'
+import Onboarding from './components/Onboarding'
+import type { Route, Tunnel, AppSettings, ServiceStatus, ServerProfile, SyncStatus } from './types'
 
 /** Global type declaration for the IPC API exposed by the preload script. */
 declare global {
@@ -32,6 +33,15 @@ declare global {
       onNavigate: (cb: (route: string) => void) => () => void
       getServiceStatus: () => Promise<ServiceStatus>
       installService: () => Promise<{ success: boolean; error?: string }>
+      // Server integration
+      getServerInfo: (url: string) => Promise<{ server_name: string }>
+      onboardServer: (url: string, email: string, password: string, totpCode?: string | null) => Promise<{ success: boolean; serverName: string; error?: string }>
+      logoutServer: () => Promise<{ success: boolean }>
+      getServerProfile: () => Promise<ServerProfile | null>
+      getSyncStatus: () => Promise<SyncStatus>
+      syncNow: () => Promise<{ success: boolean }>
+      createPeer: () => Promise<{ success: boolean; tunnelId?: string; error?: string }>
+      onAuthExpired: (cb: () => void) => () => void
     }
   }
 }
@@ -42,6 +52,8 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [wgInstalled, setWgInstalled] = useState<{ wg: boolean; wgQuick: boolean } | null>(null)
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null)
+  const [serverProfile, setServerProfile] = useState<ServerProfile | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   const refreshTunnels = useCallback(async () => {
@@ -51,38 +63,59 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      const [installed, tunnelData, settingsData, svcStatus] = await Promise.all([
+      const [installed, tunnelData, settingsData, svcStatus, profile, sync] = await Promise.all([
         window.api.checkInstalled(),
         window.api.getTunnelStatus(),
         window.api.getSettings(),
-        window.api.getServiceStatus()
+        window.api.getServiceStatus(),
+        window.api.getServerProfile(),
+        window.api.getSyncStatus()
       ])
       setWgInstalled(installed)
       setTunnels(tunnelData)
       setSettings(settingsData)
       setServiceStatus(svcStatus)
+      setServerProfile(profile)
+      setSyncStatus(sync)
+
+      // Show onboarding only when no server is configured and no tunnels exist
+      if (!profile && tunnelData.length === 0) {
+        setRoute('onboarding')
+      }
+
       setLoading(false)
     }
     init()
 
     // Listen for tray navigation
-    const cleanup = window.api.onNavigate((r) => {
+    const cleanupNavigate = window.api.onNavigate((r) => {
       if (r === 'tunnels' || r === 'settings' || r === 'dashboard') {
         setRoute(r as Route)
       }
     })
 
+    // Re-login prompt when the server auth token expires
+    const cleanupAuth = window.api.onAuthExpired(() => {
+      setServerProfile(null)
+      setRoute('onboarding')
+    })
+
     // Refresh tunnel status every 5 seconds
     const interval = setInterval(refreshTunnels, 5000)
 
-    // Refresh service status every 30 seconds
+    // Refresh service status and sync status every 30 seconds
     const serviceInterval = setInterval(async () => {
-      const svcStatus = await window.api.getServiceStatus()
+      const [svcStatus, sync] = await Promise.all([
+        window.api.getServiceStatus(),
+        window.api.getSyncStatus()
+      ])
       setServiceStatus(svcStatus)
+      setSyncStatus(sync)
     }, 30_000)
 
     return () => {
-      cleanup()
+      cleanupNavigate()
+      cleanupAuth()
       clearInterval(interval)
       clearInterval(serviceInterval)
     }
@@ -116,6 +149,19 @@ export default function App() {
           <p className="text-text-secondary text-sm">Starting ODN Client...</p>
         </div>
       </div>
+    )
+  }
+
+  // Onboarding renders full-screen without sidebar
+  if (route === 'onboarding') {
+    return (
+      <Onboarding
+        onComplete={(profile) => {
+          setServerProfile(profile)
+          setRoute('dashboard')
+          refreshTunnels()
+        }}
+      />
     )
   }
 
@@ -163,10 +209,23 @@ export default function App() {
         {route === 'settings' && settings && (
           <Settings
             settings={settings}
+            serverProfile={serverProfile}
+            syncStatus={syncStatus}
             onSave={async (s) => {
               await window.api.saveSettings(s)
               setSettings(s)
             }}
+            onSyncNow={async () => {
+              await window.api.syncNow()
+              const sync = await window.api.getSyncStatus()
+              setSyncStatus(sync)
+            }}
+            onLogoutServer={async () => {
+              await window.api.logoutServer()
+              setServerProfile(null)
+              refreshTunnels()
+            }}
+            onConnectServer={() => setRoute('onboarding')}
           />
         )}
       </main>

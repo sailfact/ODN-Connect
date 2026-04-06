@@ -49,5 +49,18 @@ export interface ServiceStatus {
   installed: boolean
 }
 
-/** The three navigable views in the application. */
-export type Route = 'dashboard' | 'tunnels' | 'settings'
+/** Display-only server profile — no tokens, safe to pass to renderer. */
+export interface ServerProfile {
+  serverName: string
+  apiBaseUrl: string
+}
+
+/** Sync loop status, polled from the main process. */
+export interface SyncStatus {
+  lastSyncAt: number | null
+  syncing: boolean
+  error: string | null
+}
+
+/** The navigable views in the application. */
+export type Route = 'dashboard' | 'tunnels' | 'settings' | 'onboarding'
