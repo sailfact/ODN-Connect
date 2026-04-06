@@ -6,10 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ODN Connect is a WireGuard desktop client built with Electron + React + TypeScript. It uses a two-process privilege model: the unprivileged Electron app communicates with an elevated system service (ODN Tunnel Service) that actually manages WireGuard tunnel lifecycle.
 
-**Paired server**: This client is designed to work with the ODN VPN Server (see
-`vpn-server/CLAUDE.md`). The server is the source of truth for peer configs,
-user accounts, and handshake status. Local `.conf` files are treated as a
-write-through cache — always fetched from the server, never manually edited.
+**Primary mode — standalone**: Users import `.conf` files directly and manage tunnels locally. No server required. This is the default and always-available mode.
+
+**Optional — server-connected**: Users can optionally connect to an ODN VPN Server (Settings → Connect to Server) for automatic peer config sync. The server is an add-on, not a prerequisite.
 
 ## Commands
 
@@ -74,9 +73,15 @@ Tunnel `.conf` files are stored in platform-specific locations resolved by `src/
 
 The service validates all config paths against this directory before executing any commands.
 
-**Important**: when server sync is active, `.conf` files in this directory are
-owned by the sync process. Manual edits will be overwritten on the next sync.
-Offline/manual mode (no server configured) retains the original behaviour.
+When server sync is active, `.conf` files in this directory are owned by the sync process — manual edits will be overwritten on the next sync. In standalone mode (no server configured), files are only ever written by the user via import.
+
+### First-launch behaviour
+
+On a fresh install the app opens directly to the Dashboard. From there users navigate to the Tunnels view to import a `.conf` file. No server setup is required or prompted.
+
+The server connection wizard (`Onboarding.tsx`) is only shown when:
+- The user explicitly clicks "Connect to Server" in Settings, **or**
+- The stored server auth token expires (forces re-login)
 
 ### Renderer state
 
@@ -93,16 +98,11 @@ The service is bundled independently from the Electron build because it runs as 
 
 ---
 
-## ODN VPN Server integration
+## Optional: ODN VPN Server integration
 
-ODN Connect can operate in two modes:
+When a server is connected, ODN Connect gains automatic peer config sync. This is entirely opt-in — standalone tunnels continue to work alongside server-synced tunnels.
 
-- **Standalone** — no server configured. Tunnels managed locally via imported
-  `.conf` files. Original behaviour, fully preserved.
-- **Server-connected** — server URL + credentials stored in `electron-store`.
-  Peer configs fetched from server and synced automatically.
-
-### Server profile (electron-store schema addition)
+### Server profile (electron-store schema)
 
 ```typescript
 interface ServerProfile {
@@ -130,6 +130,17 @@ POST {apiBaseUrl}/api/auth/refresh
 
 Token refresh should happen proactively (e.g. when `tokenExpiresAt - now < 120s`)
 in the main process before any API call. Do not refresh from the renderer.
+
+### Server connection flow (Settings → Connect to Server)
+
+```
+1. User enters server URL
+2. GET {url}/api/client/server-info (unauthenticated)
+   → display server_name, confirm endpoint
+3. User enters credentials (+ TOTP if required)
+4. POST {url}/api/auth/login
+5. Store ServerProfile, trigger initial sync
+```
 
 ### Config sync loop (src/main/sync.ts)
 
@@ -160,7 +171,7 @@ interface SyncStatus {
 }
 ```
 
-### Server-side peer creation (self-service flow)
+### Self-service peer creation
 
 When `ODN_CLIENT_SELF_SERVICE=true` on the server, ODN Connect can register a
 new peer for the current device without the user visiting the web portal:
@@ -179,20 +190,7 @@ new peer for the current device without the user visiting the web portal:
 4. Write .conf to config-dir and connect.
 ```
 
-### Onboarding flow
-
-On first launch with no server configured, show an "Add Server" screen:
-
-```
-1. User enters server URL
-2. GET {url}/api/client/server-info (unauthenticated)
-   → display server_name, confirm endpoint
-3. User enters credentials (+ TOTP if required)
-4. POST {url}/api/auth/login
-5. Store ServerProfile, trigger initial sync
-```
-
-### IPC channels (additions to src/preload/index.ts)
+### IPC channels (src/preload/index.ts)
 
 | Channel | Direction | Description |
 |---------|-----------|-------------|

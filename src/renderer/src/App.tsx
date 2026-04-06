@@ -77,12 +77,6 @@ export default function App() {
       setServiceStatus(svcStatus)
       setServerProfile(profile)
       setSyncStatus(sync)
-
-      // Show onboarding only when no server is configured and no tunnels exist
-      if (!profile && tunnelData.length === 0) {
-        setRoute('onboarding')
-      }
-
       setLoading(false)
     }
     init()
@@ -152,7 +146,7 @@ export default function App() {
     )
   }
 
-  // Onboarding renders full-screen without sidebar
+  // Server onboarding renders full-screen without sidebar
   if (route === 'onboarding') {
     return (
       <Onboarding
@@ -161,6 +155,7 @@ export default function App() {
           setRoute('dashboard')
           refreshTunnels()
         }}
+        onSkip={() => setRoute('dashboard')}
       />
     )
   }

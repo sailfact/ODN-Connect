@@ -13,9 +13,10 @@ import type { ServerProfile } from '../types'
 
 interface OnboardingProps {
   onComplete: (profile: ServerProfile) => void
+  onSkip?: () => void
 }
 
-export default function Onboarding({ onComplete }: OnboardingProps) {
+export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
   const [step, setStep] = useState<'url' | 'login'>('url')
 
   // Step 1 state
@@ -84,10 +85,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h1 className="text-text-primary text-xl font-bold">Connect to ODN Server</h1>
+          <h1 className="text-text-primary text-xl font-bold">Connect to VPN Server</h1>
           <p className="text-text-secondary text-sm mt-1">
             {step === 'url'
-              ? 'Enter your ODN VPN Server URL to get started'
+              ? 'Optionally connect to a VPN server for automatic config sync'
               : `Connecting to ${serverName}`}
           </p>
         </div>
@@ -196,9 +197,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        <p className="text-center text-text-muted text-xs mt-6">
-          No server? Import WireGuard configs manually from the Tunnels view.
-        </p>
+        {onSkip && (
+          <p className="text-center text-text-muted text-xs mt-6">
+            <button
+              onClick={onSkip}
+              className="hover:text-text-secondary transition-colors"
+            >
+              ← Back to app
+            </button>
+          </p>
+        )}
       </div>
     </div>
   )
