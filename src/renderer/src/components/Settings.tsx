@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react'
+import { Check } from 'lucide-react'
 import type { AppSettings, ServerProfile, SyncStatus } from '../types'
 
 interface SettingsProps {
@@ -45,7 +46,7 @@ function Toggle({
       <button
         onClick={() => onChange(!checked)}
         className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-          checked ? 'bg-accent-blue' : 'bg-bg-elevated border border-border'
+          checked ? 'bg-accent-primary' : 'bg-bg-elevated border border-border'
         }`}
       >
         <span
@@ -117,7 +118,7 @@ function ThemeSelector({
               onClick={() => onChange(theme.value)}
               className={`flex flex-col rounded-lg overflow-hidden border-2 transition-all ${
                 isSelected
-                  ? 'border-accent-blue scale-[1.02]'
+                  ? 'border-accent-primary scale-[1.02]'
                   : 'border-border hover:border-border-light'
               }`}
             >
@@ -229,10 +230,10 @@ export default function Settings({
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 py-6">
+      <div className="max-w-3xl mx-auto px-6 py-6">
         <div className="mb-6">
           <h1 className="text-text-primary text-xl font-bold">Settings</h1>
-          <p className="text-text-secondary text-sm mt-1">Configure ODN Client behavior</p>
+          <p className="text-text-secondary text-sm mt-1">Configure ODN Connect behavior</p>
         </div>
 
         {/* VPN Server */}
@@ -297,7 +298,7 @@ export default function Settings({
           <div className="divide-y divide-border/50">
             <Toggle
               label="Launch at startup"
-              description="Automatically start ODN Client when you log in"
+              description="Automatically start ODN Connect when you log in"
               checked={local.launchAtStartup}
               onChange={(v) => set('launchAtStartup', v)}
             />
@@ -324,13 +325,13 @@ export default function Settings({
           <div className="bg-bg-primary rounded-lg p-3 text-xs text-text-secondary">
             <p className="font-semibold text-text-primary mb-1">Elevated privileges required</p>
             <p>
-              ODN Client uses WireGuard to manage tunnels.
+              ODN Connect uses WireGuard to manage tunnels.
               Connecting and disconnecting requires elevated privileges
               (Administrator on Windows, root/sudo on Linux and macOS).
             </p>
             <p className="mt-2">
               WireGuard must be installed from{' '}
-              <span className="text-accent-blue font-mono">wireguard.com/install</span>
+              <span className="text-accent-primary font-mono">wireguard.com/install</span>
             </p>
           </div>
         </div>
@@ -354,7 +355,7 @@ export default function Settings({
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-text-secondary">Application</span>
-              <span className="text-text-primary font-medium">ODN Client</span>
+              <span className="text-text-primary font-medium">ODN Connect</span>
             </div>
             <div className="flex justify-between">
               <span className="text-text-secondary">Description</span>
@@ -364,7 +365,7 @@ export default function Settings({
               <span className="text-text-secondary">Config directory</span>
               <button
                 onClick={() => window.api.openConfigDir()}
-                className="text-accent-blue hover:underline text-xs"
+                className="text-accent-primary hover:underline text-xs"
               >
                 Open folder →
               </button>
@@ -382,7 +383,7 @@ export default function Settings({
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
           {saved && (
-            <span className="text-accent-green text-sm">✓ Settings saved</span>
+            <span className="text-accent-success text-sm flex items-center gap-1"><Check className="w-4 h-4" /> Settings saved</span>
           )}
         </div>
       </div>

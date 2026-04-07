@@ -33,14 +33,14 @@ const NavItem = ({
     onClick={onClick}
     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
       active
-        ? 'bg-accent-blue/10 text-accent-blue'
+        ? 'bg-accent-primary/10 text-accent-primary'
         : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
     }`}
   >
     <span className="w-4 h-4 shrink-0">{icon}</span>
     <span className="flex-1">{label}</span>
     {badge && (
-      <span className="text-xs bg-accent-blue text-white rounded-full w-5 h-5 flex items-center justify-center font-semibold">
+      <span className="text-xs bg-accent-primary text-white rounded-full w-5 h-5 flex items-center justify-center font-semibold">
         {badge}
       </span>
     )}
@@ -83,10 +83,10 @@ export default function Sidebar({ route, onNavigate, tunnels }: SidebarProps) {
     <aside className="w-56 shrink-0 flex flex-col bg-bg-secondary border-r border-border h-full">
       {/* App header */}
       <div className="drag-region px-4 py-4 flex items-center gap-3 border-b border-border">
-        <img src={logo} alt="ODN Client" className="w-8 h-8 shrink-0" />
+        <img src={logo} alt="ODN Connect" className="w-8 h-8 shrink-0" />
         <div className="no-drag">
-          <div className="text-text-primary font-semibold text-sm leading-tight">ODN Client</div>
-          <div className="text-text-muted text-xs">WireGuard Client</div>
+          <div className="text-text-primary font-semibold text-sm leading-tight">ODN Connect</div>
+          <div className="text-text-muted text-xs">WireGuard Desktop</div>
         </div>
       </div>
 
@@ -117,17 +117,17 @@ export default function Sidebar({ route, onNavigate, tunnels }: SidebarProps) {
       </nav>
 
       {/* Connection summary */}
-      <div className="px-3 py-4 border-t border-border">
+      <div className="px-3 py-4 border-t border-border" role="status" aria-live="polite">
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
             connectedCount > 0
-              ? 'bg-green-500/10 text-accent-green'
+              ? 'bg-green-500/10 text-accent-success'
               : 'bg-bg-elevated text-text-muted'
           }`}
         >
           <div
             className={`w-2 h-2 rounded-full ${
-              connectedCount > 0 ? 'bg-accent-green animate-pulse' : 'bg-text-muted'
+              connectedCount > 0 ? 'bg-accent-success animate-pulse' : 'bg-text-muted'
             }`}
           />
           {connectedCount > 0

@@ -79,8 +79,8 @@ export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
       <div className="w-full max-w-sm mx-4">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-accent-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-12 h-12 rounded-xl bg-accent-primary/10 border border-accent-primary/20 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-6 h-6 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
@@ -106,7 +106,7 @@ export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
                 value={url}
                 onChange={(e) => { setUrl(e.target.value); setUrlError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleCheckUrl()}
-                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-primary"
                 autoFocus
               />
             </div>
@@ -137,7 +137,7 @@ export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setLoginError('') }}
-                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-primary"
                 autoFocus
               />
             </div>
@@ -152,7 +152,7 @@ export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setLoginError('') }}
                 onKeyDown={(e) => !showTotp && e.key === 'Enter' && handleLogin()}
-                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-primary"
               />
             </div>
 
@@ -169,7 +169,7 @@ export default function Onboarding({ onComplete, onSkip }: OnboardingProps) {
                   value={totpCode}
                   onChange={(e) => { setTotpCode(e.target.value); setLoginError('') }}
                   onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                  className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-blue font-mono tracking-widest"
+                  className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent-primary font-mono tracking-widest"
                   autoFocus
                 />
               </div>

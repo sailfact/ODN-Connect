@@ -135,25 +135,25 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply bg-accent-blue hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm;
+    @apply bg-accent-primary hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none;
   }
   .btn-secondary {
-    @apply bg-bg-elevated hover:bg-bg-tertiary border border-border text-text-primary font-medium px-4 py-2 rounded-lg transition-colors duration-150 text-sm;
+    @apply bg-bg-elevated hover:bg-bg-tertiary border border-border text-text-primary font-medium px-4 py-2 rounded-lg transition-colors duration-150 text-sm focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none;
   }
   .btn-danger {
-    @apply bg-accent-red hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm;
+    @apply bg-accent-danger hover:opacity-90 text-white font-medium px-4 py-2 rounded-lg transition-opacity duration-150 text-sm focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none;
   }
   .btn-ghost {
-    @apply hover:bg-bg-elevated text-text-secondary hover:text-text-primary px-4 py-2 rounded-lg transition-colors duration-150 text-sm;
+    @apply hover:bg-bg-elevated text-text-secondary hover:text-text-primary px-4 py-2 rounded-lg transition-colors duration-150 text-sm focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none;
   }
   .card {
     @apply bg-bg-secondary border border-border rounded-xl p-5;
   }
   .input {
-    @apply bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:border-accent-blue transition-colors w-full;
+    @apply bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary transition-colors w-full;
   }
   .badge-connected {
-    @apply inline-flex items-center gap-1.5 bg-green-500/10 text-accent-green border border-green-500/20 text-xs font-medium px-2.5 py-1 rounded-full;
+    @apply inline-flex items-center gap-1.5 bg-green-500/10 text-accent-success border border-green-500/20 text-xs font-medium px-2.5 py-1 rounded-full;
   }
   .badge-disconnected {
     @apply inline-flex items-center gap-1.5 bg-slate-500/10 text-text-secondary border border-slate-500/20 text-xs font-medium px-2.5 py-1 rounded-full;
