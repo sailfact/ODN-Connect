@@ -26,6 +26,7 @@ import {
   getConfigDir,
   initServiceClient,
   isServiceConnected,
+  getServiceClient,
   tryReconnectService
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected, getServerProfile, saveServerProfile, deleteServerProfile } from './store'
@@ -151,7 +152,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
       const settings = getSettings()
       if (settings.showNotifications) {
         new Notification({
-          title: 'ODN Client',
+          title: 'ODN Connect',
           body: `Connected to ${tunnel.name}`
         }).show()
       }
@@ -177,7 +178,7 @@ ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
       const settings = getSettings()
       if (settings.showNotifications) {
         new Notification({
-          title: 'ODN Client',
+          title: 'ODN Connect',
           body: `Disconnected from ${tunnel.name}`
         }).show()
       }
