@@ -9,7 +9,7 @@
  * Left-clicking the tray icon toggles window visibility.
  * The menu auto-refreshes every 5 seconds to stay in sync with WireGuard state.
  *
- * Since getActiveInterfaces() is async (communicates with the tunnel service),
+ * Since getActiveInterfaces() is async (queries the WireGuard CLI),
  * the tray reads from a cached list that is refreshed by an async polling loop.
  */
 

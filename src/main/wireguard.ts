@@ -1,15 +1,13 @@
 /**
  * WireGuard integration layer.
  *
- * This module provides tunnel management capabilities by delegating
- * elevated operations (connect, disconnect, status queries) to the
- * ODN Tunnel Service running as SYSTEM/root.
+ * This module provides tunnel management capabilities by executing
+ * WireGuard CLI commands directly. Elevated operations (connect,
+ * disconnect) use platform-appropriate privilege escalation (sudo,
+ * osascript, runas).
  *
  * Non-elevated operations (config parsing, file management, key generation)
  * run directly in the Electron process.
- *
- * Fallback: If the service is unavailable and the app is already elevated,
- * commands are executed directly (for development workflow).
  */
 
 import { execSync, exec } from 'child_process'
@@ -19,51 +17,9 @@ import * as path from 'path'
 import * as os from 'os'
 import { parse as parseIni } from 'ini'
 import type { Tunnel, WireGuardPeer, WireGuardInterface, WireGuardStatus } from './types'
-import { TunnelServiceClient } from '../service/client'
 
 const execAsync = promisify(exec)
 const platform = process.platform
-
-// ─── Service client singleton ────────────────────────────────────────────────
-
-let serviceClient: TunnelServiceClient | null = null
-
-/** Initialize the service client connection. Call once during app startup. */
-export async function initServiceClient(): Promise<boolean> {
-  serviceClient = new TunnelServiceClient()
-  try {
-    await serviceClient.connect()
-    console.log('Connected to ODN Tunnel Service')
-    return true
-  } catch {
-    console.warn('ODN Tunnel Service not available — elevated operations will use direct fallback if running as admin')
-    serviceClient = null
-    return false
-  }
-}
-
-/** Returns whether the service client is connected. */
-export function isServiceConnected(): boolean {
-  return serviceClient?.isConnected() ?? false
-}
-
-/** Returns the service client instance (or null if not connected). */
-export function getServiceClient(): TunnelServiceClient | null {
-  return serviceClient
-}
-
-/**
- * Attempt to reconnect to the tunnel service if not currently connected.
- * Called periodically by the health monitor.
- */
-export async function tryReconnectService(): Promise<boolean> {
-  if (serviceClient?.isConnected()) return true
-  if (serviceClient) {
-    serviceClient.disconnect()
-    serviceClient = null
-  }
-  return initServiceClient()
-}
 
 // ─── Platform-specific binary paths ──────────────────────────────────────────
 
@@ -138,21 +94,8 @@ function commandExists(cmd: string): boolean {
 
 // ─── Connect / Disconnect ────────────────────────────────────────────────────
 
-/**
- * Connect a WireGuard tunnel via the tunnel service.
- * Falls back to direct CLI execution if the service is unavailable (dev mode).
- */
+/** Connect a WireGuard tunnel via direct CLI execution. */
 export async function connectTunnel(configPath: string): Promise<{ success: boolean; error?: string }> {
-  // Prefer service client
-  if (serviceClient?.isConnected()) {
-    return serviceClient.connectTunnel(configPath)
-  }
-
-  // Fallback: direct execution (requires elevation)
-  return connectTunnelDirect(configPath)
-}
-
-async function connectTunnelDirect(configPath: string): Promise<{ success: boolean; error?: string }> {
   try {
     if (platform === 'win32') {
       await execAsync(`"${WG_EXE}" /installtunnelservice "${configPath}"`)
@@ -177,27 +120,15 @@ async function connectTunnelDirect(configPath: string): Promise<{ success: boole
     if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') ||
         msg.includes('administrator') || msg.includes('Operation not permitted') ||
         msg.includes('Permission denied')) {
-      const hint = 'Tunnel service is not running. Please install the ODN Tunnel Service.'
-      return { success: false, error: hint }
+      return { success: false, error: 'Elevated privileges required. Please run as Administrator.' }
     }
 
     return { success: false, error: msg }
   }
 }
 
-/**
- * Disconnect a WireGuard tunnel via the tunnel service.
- * Falls back to direct CLI execution if the service is unavailable (dev mode).
- */
+/** Disconnect a WireGuard tunnel via direct CLI execution. */
 export async function disconnectTunnel(interfaceName: string): Promise<{ success: boolean; error?: string }> {
-  if (serviceClient?.isConnected()) {
-    return serviceClient.disconnectTunnel(interfaceName)
-  }
-
-  return disconnectTunnelDirect(interfaceName)
-}
-
-async function disconnectTunnelDirect(interfaceName: string): Promise<{ success: boolean; error?: string }> {
   try {
     if (platform === 'win32') {
       await execAsync(`"${WG_EXE}" /uninstalltunnelservice "${interfaceName}"`)
@@ -222,8 +153,7 @@ async function disconnectTunnelDirect(interfaceName: string): Promise<{ success:
     if (msg.includes('access') || msg.includes('1314') || msg.includes('privilege') ||
         msg.includes('administrator') || msg.includes('Operation not permitted') ||
         msg.includes('Permission denied')) {
-      const hint = 'Tunnel service is not running. Please install the ODN Tunnel Service.'
-      return { success: false, error: hint }
+      return { success: false, error: 'Elevated privileges required. Please run as Administrator.' }
     }
 
     return { success: false, error: msg }
@@ -232,16 +162,8 @@ async function disconnectTunnelDirect(interfaceName: string): Promise<{ success:
 
 // ─── Status queries (now async) ─────────────────────────────────────────────
 
-/**
- * Returns names of currently active WireGuard interfaces.
- * Queries via the tunnel service, or falls back to direct CLI.
- */
+/** Returns names of currently active WireGuard interfaces via direct CLI. */
 export async function getActiveInterfaces(): Promise<string[]> {
-  if (serviceClient?.isConnected()) {
-    return serviceClient.getActiveInterfaces()
-  }
-
-  // Fallback: direct execution
   try {
     const cmd = platform === 'win32' ? `"${WG_CLI}" show interfaces` : `sudo ${WG_CLI} show interfaces`
     const result = execSync(cmd, { stdio: 'pipe' }).toString().trim()
@@ -252,20 +174,12 @@ export async function getActiveInterfaces(): Promise<string[]> {
   }
 }
 
-/**
- * Returns structured status data for all active WireGuard interfaces.
- * Queries via the tunnel service, or falls back to direct CLI.
- */
+/** Returns structured status data for all active WireGuard interfaces via direct CLI. */
 export async function getWireGuardStatus(): Promise<WireGuardStatus> {
-  if (serviceClient?.isConnected()) {
-    return serviceClient.getWireGuardStatus()
-  }
-
-  // Fallback: direct execution
-  return { interfaces: parseWgShowDumpDirect() }
+  return { interfaces: parseWgShowDump() }
 }
 
-function parseWgShowDumpDirect(): WireGuardInterface[] {
+function parseWgShowDump(): WireGuardInterface[] {
   try {
     const cmd = platform === 'win32' ? `"${WG_CLI}" show all dump` : `sudo ${WG_CLI} show all dump`
     const output = execSync(cmd, { stdio: 'pipe' }).toString().trim()

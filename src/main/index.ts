@@ -5,7 +5,6 @@
  * - Create and manage the BrowserWindow
  * - Register IPC handlers that bridge the renderer to WireGuard CLI operations
  * - Manage app lifecycle (tray, single-instance, close-to-tray)
- * - Initialize the tunnel service client for non-elevated operation
  */
 
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
@@ -23,13 +22,9 @@ import {
   isWireGuardInstalled,
   formatBytes,
   formatHandshake,
-  getConfigDir,
-  initServiceClient,
-  isServiceConnected,
-  tryReconnectService
+  getConfigDir
 } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
-import { installService, uninstallService, isServiceInstalled } from '../service/installer'
 import type { Tunnel, AppSettings } from './types'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
@@ -127,7 +122,7 @@ ipcMain.handle('tunnels:status', async () => {
   })
 })
 
-/** Install a WireGuard tunnel as a Windows service and notify the user on success. */
+/** Connect a WireGuard tunnel and notify the user on success. */
 ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -153,7 +148,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   }
 })
 
-/** Uninstall a WireGuard tunnel service and notify the user on success. */
+/** Disconnect a WireGuard tunnel and notify the user on success. */
 ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -264,36 +259,6 @@ ipcMain.handle('app:open-config-dir', () => {
   shell.openPath(getConfigDir())
 })
 
-// ─── Service management IPC ──────────────────────────────────────────────────
-
-/** Check if the tunnel service is running and reachable. */
-ipcMain.handle('service:status', async () => {
-  const connected = isServiceConnected()
-  // If not connected, try to reconnect in the background
-  if (!connected) {
-    tryReconnectService().catch(() => {})
-  }
-  return {
-    connected: isServiceConnected(),
-    installed: await isServiceInstalled()
-  }
-})
-
-/** Install the tunnel service (one-time, prompts for elevation). */
-ipcMain.handle('service:install', async () => {
-  const result = await installService()
-  if (result.success) {
-    // Try to connect to the newly installed service
-    await initServiceClient()
-  }
-  return result
-})
-
-/** Uninstall the tunnel service. */
-ipcMain.handle('service:uninstall', async () => {
-  return uninstallService()
-})
-
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -302,16 +267,6 @@ app.whenReady().then(async () => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
-
-  // Connect to the tunnel service before creating the window
-  await initServiceClient()
-
-  // Periodically attempt to reconnect to the service if it goes down
-  setInterval(() => {
-    if (!isServiceConnected()) {
-      tryReconnectService().catch(() => {})
-    }
-  }, 30_000)
 
   const win = createWindow()
 

@@ -43,11 +43,5 @@ export interface AppSettings {
   theme: 'dark' | 'light' | 'system'
 }
 
-/** Status of the elevated tunnel service. */
-export interface ServiceStatus {
-  connected: boolean
-  installed: boolean
-}
-
 /** The three navigable views in the application. */
 export type Route = 'dashboard' | 'tunnels' | 'settings'
