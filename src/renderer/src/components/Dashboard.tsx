@@ -7,14 +7,20 @@
  */
 
 import { useState } from 'react'
-import type { Tunnel, Route } from '../types'
+import { AlertTriangle, Zap, Lock, Loader2, RefreshCw } from 'lucide-react'
+import type { Tunnel, Route, ServiceStatus } from '../types'
 
 interface DashboardProps {
   tunnels: Tunnel[]
   wgInstalled: { wg: boolean; wgQuick: boolean } | null
+  serviceStatus: ServiceStatus | null
   onNavigate: (r: Route) => void
   onConnect: (id: string) => Promise<void>
   onDisconnect: (id: string) => Promise<void>
+  onInstallService: () => Promise<{ success: boolean; error?: string }>
+  onRefreshServiceStatus: () => Promise<void>
+  onRefreshTunnels: () => Promise<void>
+  lastRefreshed: number
 }
 
 /** A small card displaying a single statistic with a label and optional subtitle. */
@@ -58,7 +64,7 @@ function TunnelCard({
   return (
     <div className={`card flex items-center gap-4 transition-all ${tunnel.connected ? 'border-green-500/30' : ''}`}>
       {/* Status dot */}
-      <div className={`w-3 h-3 rounded-full shrink-0 ${tunnel.connected ? 'bg-accent-green' : 'bg-text-muted'}`} />
+      <div className={`w-3 h-3 rounded-full shrink-0 ${tunnel.connected ? 'bg-accent-success' : 'bg-text-muted'}`} />
 
       {/* Info */}
       <div className="flex-1 min-w-0">
@@ -73,6 +79,9 @@ function TunnelCard({
             <span className="font-mono">{tunnel.address.join(', ')}</span>
           )}
           <span>{tunnel.peers.length} peer{tunnel.peers.length !== 1 ? 's' : ''}</span>
+          {tunnel.connected && tunnel.lastConnected && (
+            <span>Connected for {formatDuration(tunnel.lastConnected)}</span>
+          )}
           {tunnel.connected && totalRx + totalTx > 0 && (
             <span>↑{formatBytes(totalTx)} ↓{formatBytes(totalRx)}</span>
           )}
@@ -87,17 +96,30 @@ function TunnelCard({
           busy
             ? 'opacity-50 cursor-not-allowed bg-bg-elevated text-text-secondary'
             : tunnel.connected
-            ? 'btn-secondary text-accent-red hover:border-red-500/50'
+            ? 'btn-secondary text-accent-danger hover:border-red-500/50'
             : 'btn-primary'
         }`}
       >
-        {busy ? '...' : tunnel.connected ? 'Disconnect' : 'Connect'}
+        {busy ? (
+          <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" />{tunnel.connected ? 'Disconnecting...' : 'Connecting...'}</>
+        ) : tunnel.connected ? 'Disconnect' : 'Connect'}
       </button>
     </div>
   )
 }
 
-/** Converts a byte count to a human-readable string for display in the UI. */
+function formatDuration(sinceMs: number): string {
+  const diffSec = Math.floor((Date.now() - sinceMs) / 1000)
+  if (diffSec < 60) return `${diffSec}s`
+  const min = Math.floor(diffSec / 60)
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  const remMin = min % 60
+  if (hr < 24) return `${hr}h ${remMin}m`
+  const day = Math.floor(hr / 24)
+  return `${day}d ${hr % 24}h`
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -106,7 +128,16 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect, onDisconnect }: DashboardProps) {
+function formatRelative(ts: number): string {
+  const sec = Math.floor((Date.now() - ts) / 1000)
+  if (sec < 5) return 'just now'
+  if (sec < 60) return `${sec}s ago`
+  return `${Math.floor(sec / 60)}m ago`
+}
+
+export default function Dashboard({ tunnels, wgInstalled, serviceStatus, onNavigate, onConnect, onDisconnect, onInstallService, onRefreshServiceStatus, onRefreshTunnels, lastRefreshed }: DashboardProps) {
+  const [installingService, setInstallingService] = useState(false)
+  const [serviceError, setServiceError] = useState<string | null>(null)
   const connected = tunnels.filter((t) => t.connected)
   const totalPeers = tunnels.reduce((acc, t) => acc + t.peers.length, 0)
   const totalRx = tunnels.reduce((acc, t) => acc + t.peers.reduce((a, p) => a + (p.rxBytes || 0), 0), 0)
@@ -116,26 +147,78 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
     <div className="h-full overflow-y-auto">
       <div className="max-w-3xl mx-auto px-6 py-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-text-primary text-xl font-bold">Dashboard</h1>
-          <p className="text-text-secondary text-sm mt-1">
-            Overview of your WireGuard network
-          </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-text-primary text-xl font-bold">Dashboard</h1>
+            <p className="text-text-secondary text-sm mt-1">
+              Overview of your WireGuard network
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-text-muted text-xs">Updated {formatRelative(lastRefreshed)}</span>
+            <button onClick={onRefreshTunnels} className="btn-ghost" aria-label="Refresh">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* WireGuard not installed warning */}
         {wgInstalled && (!wgInstalled.wg || !wgInstalled.wgQuick) && (
           <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
             <div className="flex items-start gap-3">
-              <div className="text-accent-yellow text-lg shrink-0">⚠</div>
+              <AlertTriangle className="w-5 h-5 text-accent-warning shrink-0" />
               <div>
-                <p className="text-accent-yellow font-semibold text-sm">WireGuard not fully installed</p>
+                <p className="text-accent-warning font-semibold text-sm">WireGuard not fully installed</p>
                 <p className="text-text-secondary text-xs mt-1">
                   {!wgInstalled.wg && 'wg not found. '}
                   {!wgInstalled.wgQuick && 'wg-quick / wireguard not found. '}
                   Download and install WireGuard from{' '}
                   <code className="bg-bg-elevated px-1 rounded text-text-primary">wireguard.com/install</code>
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tunnel service not running warning */}
+        {serviceStatus && !serviceStatus.connected && (
+          <div className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <Zap className="w-5 h-5 text-orange-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-orange-400 font-semibold text-sm">Tunnel Service Not Running</p>
+                <p className="text-text-secondary text-xs mt-1">
+                  {serviceStatus.installed
+                    ? 'The ODN Tunnel Service is installed but not responding. Try restarting it.'
+                    : 'Install the ODN Tunnel Service to connect tunnels without running as Administrator.'}
+                </p>
+                {serviceError && (
+                  <p className="text-accent-danger text-xs mt-1">{serviceError}</p>
+                )}
+                {!serviceStatus.installed ? (
+                  <button
+                    className="mt-2 px-3 py-1 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+                    disabled={installingService}
+                    onClick={async () => {
+                      setInstallingService(true)
+                      setServiceError(null)
+                      const result = await onInstallService()
+                      if (!result.success) {
+                        setServiceError(result.error || 'Failed to install service')
+                      }
+                      setInstallingService(false)
+                    }}
+                  >
+                    {installingService ? 'Installing...' : 'Install Service'}
+                  </button>
+                ) : (
+                  <button
+                    className="mt-2 px-3 py-1 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+                    onClick={onRefreshServiceStatus}
+                  >
+                    Retry Connection
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -169,7 +252,7 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-text-primary font-semibold text-sm">Your Tunnels</h2>
           <button
-            className="text-accent-blue text-sm hover:underline"
+            className="text-accent-primary text-sm hover:underline"
             onClick={() => onNavigate('tunnels')}
           >
             Manage all →
@@ -178,7 +261,7 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
 
         {tunnels.length === 0 ? (
           <div className="card text-center py-12">
-            <div className="text-4xl mb-3">🔒</div>
+            <Lock className="w-10 h-10 text-text-muted mx-auto mb-3" />
             <p className="text-text-primary font-semibold">No tunnels configured</p>
             <p className="text-text-secondary text-sm mt-1 mb-4">
               Import a WireGuard .conf file to get started
@@ -210,7 +293,7 @@ export default function Dashboard({ tunnels, wgInstalled, onNavigate, onConnect,
                   <div key={`${tunnel.id}-${idx}`} className="card py-3 px-4 flex items-center gap-4">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${
                       peer.latestHandshake && Date.now() / 1000 - peer.latestHandshake < 180
-                        ? 'bg-accent-green'
+                        ? 'bg-accent-success'
                         : 'bg-text-muted'
                     }`} />
                     <div className="flex-1 min-w-0">

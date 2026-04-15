@@ -33,6 +33,20 @@ const api = {
   onNavigate: (cb: (route: string) => void) => {
     ipcRenderer.on('navigate', (_, route) => cb(route))
     return () => ipcRenderer.removeAllListeners('navigate')
+  },
+
+  // Server integration
+  getServerInfo: (url: string) => ipcRenderer.invoke('server:getServerInfo', url),
+  onboardServer: (url: string, email: string, password: string, totpCode?: string | null) =>
+    ipcRenderer.invoke('server:onboard', { url, email, password, totpCode }),
+  logoutServer: () => ipcRenderer.invoke('server:logout'),
+  getServerProfile: () => ipcRenderer.invoke('server:getProfile'),
+  getSyncStatus: () => ipcRenderer.invoke('server:getSyncStatus'),
+  syncNow: () => ipcRenderer.invoke('server:syncNow'),
+  createPeer: () => ipcRenderer.invoke('server:createPeer'),
+  onAuthExpired: (cb: () => void) => {
+    ipcRenderer.on('server:authExpired', cb)
+    return () => ipcRenderer.removeAllListeners('server:authExpired')
   }
 }
 

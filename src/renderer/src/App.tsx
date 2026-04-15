@@ -1,9 +1,9 @@
 /**
  * Root application component.
  *
- * Manages top-level state (current route, tunnels, settings) and orchestrates
- * communication with the main process via `window.api`. Tunnel status is polled
- * every 5 seconds to keep the UI in sync with WireGuard's live state.
+ * Manages top-level state (current route, tunnels, settings, server profile) and
+ * orchestrates communication with the main process via `window.api`. Tunnel status
+ * is polled every 5 seconds to keep the UI in sync with WireGuard's live state.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -11,7 +11,10 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
 import Tunnels from './components/Tunnels'
 import Settings from './components/Settings'
-import type { Route, Tunnel, AppSettings } from './types'
+import Onboarding from './components/Onboarding'
+import StatusBar from './components/StatusBar'
+import { ToastProvider, useToast } from './components/Toast'
+import type { Route, Tunnel, AppSettings, ServiceStatus, ServerProfile, SyncStatus } from './types'
 
 /** Global type declaration for the IPC API exposed by the preload script. */
 declare global {
@@ -30,64 +33,121 @@ declare global {
       getVersion: () => Promise<string>
       openConfigDir: () => Promise<void>
       onNavigate: (cb: (route: string) => void) => () => void
+      getServiceStatus: () => Promise<ServiceStatus>
+      installService: () => Promise<{ success: boolean; error?: string }>
+      // Server integration
+      getServerInfo: (url: string) => Promise<{ server_name: string }>
+      onboardServer: (url: string, email: string, password: string, totpCode?: string | null) => Promise<{ success: boolean; serverName: string; error?: string }>
+      logoutServer: () => Promise<{ success: boolean }>
+      getServerProfile: () => Promise<ServerProfile | null>
+      getSyncStatus: () => Promise<SyncStatus>
+      syncNow: () => Promise<{ success: boolean }>
+      createPeer: () => Promise<{ success: boolean; tunnelId?: string; error?: string }>
+      onAuthExpired: (cb: () => void) => () => void
     }
   }
 }
 
-export default function App() {
+function AppContent() {
   const [route, setRoute] = useState<Route>('dashboard')
   const [tunnels, setTunnels] = useState<Tunnel[]>([])
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [wgInstalled, setWgInstalled] = useState<{ wg: boolean; wgQuick: boolean } | null>(null)
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null)
+  const [serverProfile, setServerProfile] = useState<ServerProfile | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lastRefreshed, setLastRefreshed] = useState<number>(Date.now())
+  const { addToast } = useToast()
 
   const refreshTunnels = useCallback(async () => {
     const data = await window.api.getTunnelStatus()
     setTunnels(data)
+    setLastRefreshed(Date.now())
   }, [])
 
   useEffect(() => {
     async function init() {
-      const [installed, tunnelData, settingsData] = await Promise.all([
+      const [installed, tunnelData, settingsData, svcStatus, profile, sync] = await Promise.all([
         window.api.checkInstalled(),
         window.api.getTunnelStatus(),
-        window.api.getSettings()
+        window.api.getSettings(),
+        window.api.getServiceStatus(),
+        window.api.getServerProfile(),
+        window.api.getSyncStatus()
       ])
       setWgInstalled(installed)
       setTunnels(tunnelData)
       setSettings(settingsData)
+      setServiceStatus(svcStatus)
+      setServerProfile(profile)
+      setSyncStatus(sync)
+      setLastRefreshed(Date.now())
       setLoading(false)
     }
     init()
 
     // Listen for tray navigation
-    const cleanup = window.api.onNavigate((r) => {
+    const cleanupNavigate = window.api.onNavigate((r) => {
       if (r === 'tunnels' || r === 'settings' || r === 'dashboard') {
         setRoute(r as Route)
       }
     })
 
+    // Re-login prompt when the server auth token expires
+    const cleanupAuth = window.api.onAuthExpired(() => {
+      setServerProfile(null)
+      setRoute('onboarding')
+    })
+
     // Refresh tunnel status every 5 seconds
     const interval = setInterval(refreshTunnels, 5000)
 
+    // Refresh service status and sync status every 30 seconds
+    const serviceInterval = setInterval(async () => {
+      const [svcStatus, sync] = await Promise.all([
+        window.api.getServiceStatus(),
+        window.api.getSyncStatus()
+      ])
+      setServiceStatus(svcStatus)
+      setSyncStatus(sync)
+    }, 30_000)
+
     return () => {
-      cleanup()
+      cleanupNavigate()
+      cleanupAuth()
       clearInterval(interval)
+      clearInterval(serviceInterval)
     }
+  }, [refreshTunnels])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+      if (e.key === '1') { e.preventDefault(); setRoute('dashboard') }
+      else if (e.key === '2') { e.preventDefault(); setRoute('tunnels') }
+      else if (e.key === '3') { e.preventDefault(); setRoute('settings') }
+      else if (e.key === 'r') { e.preventDefault(); refreshTunnels() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [refreshTunnels])
 
   // Apply theme to the document based on settings
   useEffect(() => {
     if (!settings) return
 
-    const applyTheme = (theme: 'dark' | 'light') => {
+    type NamedTheme = 'midnight' | 'arctic-light' | 'slate-dusk' | 'nord-frost'
+    const applyTheme = (theme: NamedTheme) => {
       document.documentElement.setAttribute('data-theme', theme)
     }
 
     if (settings.theme === 'system') {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      applyTheme(mq.matches ? 'dark' : 'light')
-      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light')
+      applyTheme(mq.matches ? 'midnight' : 'arctic-light')
+      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'midnight' : 'arctic-light')
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)
     } else {
@@ -99,52 +159,114 @@ export default function App() {
     return (
       <div className="flex items-center justify-center h-full bg-bg-primary">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-          <p className="text-text-secondary text-sm">Starting ODN Client...</p>
+          <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-text-secondary text-sm">Starting ODN Connect...</p>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="flex h-full bg-bg-primary overflow-hidden">
-      <Sidebar
-        route={route}
-        onNavigate={setRoute}
-        tunnels={tunnels}
+  // Server onboarding renders full-screen without sidebar
+  if (route === 'onboarding') {
+    return (
+      <Onboarding
+        onComplete={(profile) => {
+          setServerProfile(profile)
+          setRoute('dashboard')
+          refreshTunnels()
+          addToast('Connected to server', 'success')
+        }}
+        onSkip={() => setRoute('dashboard')}
       />
-      <main className="flex-1 overflow-hidden">
-        {route === 'dashboard' && (
-          <Dashboard
-            tunnels={tunnels}
-            wgInstalled={wgInstalled}
-            onNavigate={setRoute}
-            onConnect={async (id) => {
-              await window.api.connectTunnel(id)
-              refreshTunnels()
-            }}
-            onDisconnect={async (id) => {
-              await window.api.disconnectTunnel(id)
-              refreshTunnels()
-            }}
-          />
-        )}
-        {route === 'tunnels' && (
-          <Tunnels
-            tunnels={tunnels}
-            onRefresh={refreshTunnels}
-          />
-        )}
-        {route === 'settings' && settings && (
-          <Settings
-            settings={settings}
-            onSave={async (s) => {
-              await window.api.saveSettings(s)
-              setSettings(s)
-            }}
-          />
-        )}
-      </main>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-bg-primary overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          route={route}
+          onNavigate={setRoute}
+          tunnels={tunnels}
+        />
+        <main className="flex-1 overflow-hidden">
+          {route === 'dashboard' && (
+            <Dashboard
+              tunnels={tunnels}
+              wgInstalled={wgInstalled}
+              serviceStatus={serviceStatus}
+              onNavigate={setRoute}
+              onConnect={async (id) => {
+                const result = await window.api.connectTunnel(id)
+                await refreshTunnels()
+                if (result.success) addToast('Tunnel connected', 'success')
+                else addToast(result.error || 'Connection failed', 'error')
+              }}
+              onDisconnect={async (id) => {
+                const result = await window.api.disconnectTunnel(id)
+                await refreshTunnels()
+                if (result.success) addToast('Tunnel disconnected', 'info')
+                else addToast(result.error || 'Disconnect failed', 'error')
+              }}
+              onInstallService={async () => {
+                const result = await window.api.installService()
+                if (result.success) {
+                  setServiceStatus({ connected: true, installed: true })
+                  addToast('Service installed', 'success')
+                }
+                return result
+              }}
+              onRefreshServiceStatus={async () => {
+                const svcStatus = await window.api.getServiceStatus()
+                setServiceStatus(svcStatus)
+              }}
+              onRefreshTunnels={refreshTunnels}
+              lastRefreshed={lastRefreshed}
+            />
+          )}
+          {route === 'tunnels' && (
+            <Tunnels
+              tunnels={tunnels}
+              wgInstalled={wgInstalled}
+              onRefresh={refreshTunnels}
+              onToast={addToast}
+            />
+          )}
+          {route === 'settings' && settings && (
+            <Settings
+              settings={settings}
+              serverProfile={serverProfile}
+              syncStatus={syncStatus}
+              onSave={async (s) => {
+                await window.api.saveSettings(s)
+                setSettings(s)
+                addToast('Settings saved', 'success')
+              }}
+              onSyncNow={async () => {
+                await window.api.syncNow()
+                const sync = await window.api.getSyncStatus()
+                setSyncStatus(sync)
+              }}
+              onLogoutServer={async () => {
+                await window.api.logoutServer()
+                setServerProfile(null)
+                refreshTunnels()
+                addToast('Disconnected from server', 'info')
+              }}
+              onConnectServer={() => setRoute('onboarding')}
+            />
+          )}
+        </main>
+      </div>
+      <StatusBar tunnels={tunnels} lastRefreshed={lastRefreshed} />
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   )
 }

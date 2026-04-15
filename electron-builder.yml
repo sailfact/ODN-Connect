@@ -1,5 +1,5 @@
 appId: com.odn.client
-productName: ODN Client
+productName: ODN Connect
 directories:
   buildResources: resources
 files:

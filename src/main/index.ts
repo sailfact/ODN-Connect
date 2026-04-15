@@ -5,6 +5,7 @@
  * - Create and manage the BrowserWindow
  * - Register IPC handlers that bridge the renderer to WireGuard CLI operations
  * - Manage app lifecycle (tray, single-instance, close-to-tray)
+ * - Initialize the tunnel service client for non-elevated operation
  */
 
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
@@ -22,15 +23,30 @@ import {
   isWireGuardInstalled,
   formatBytes,
   formatHandshake,
-  getConfigDir
+  getConfigDir,
+  initServiceClient,
+  isServiceConnected,
+  getServiceClient,
+  tryReconnectService
 } from './wireguard'
-import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected } from './store'
+import { getTunnels, saveTunnel, deleteTunnel, getSettings, saveSettings, updateTunnelConnected, getServerProfile, saveServerProfile, deleteServerProfile } from './store'
+import { installService, uninstallService, isServiceInstalled } from '../service/installer'
+import { ServerClient } from './server-client'
+import { SyncManager } from './sync'
 import type { Tunnel, AppSettings } from './types'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
+import * as os from 'node:os'
 
 /** Singleton reference to the main application window. */
 let mainWindow: BrowserWindow | null = null
+
+let serverClient: ServerClient | null = null
+let syncManager: SyncManager | null = null
+
+function onAuthExpired(): void {
+  mainWindow?.webContents.send('server:authExpired')
+}
 
 /**
  * Creates the main application window with context-isolated preload script.
@@ -122,7 +138,7 @@ ipcMain.handle('tunnels:status', async () => {
   })
 })
 
-/** Connect a WireGuard tunnel and notify the user on success. */
+/** Install a WireGuard tunnel as a Windows service and notify the user on success. */
 ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -136,7 +152,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
       const settings = getSettings()
       if (settings.showNotifications) {
         new Notification({
-          title: 'ODN Client',
+          title: 'ODN Connect',
           body: `Connected to ${tunnel.name}`
         }).show()
       }
@@ -148,7 +164,7 @@ ipcMain.handle('tunnels:connect', async (_, tunnelId: string) => {
   }
 })
 
-/** Disconnect a WireGuard tunnel and notify the user on success. */
+/** Uninstall a WireGuard tunnel service and notify the user on success. */
 ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
   try {
     const tunnels = getTunnels()
@@ -162,7 +178,7 @@ ipcMain.handle('tunnels:disconnect', async (_, tunnelId: string) => {
       const settings = getSettings()
       if (settings.showNotifications) {
         new Notification({
-          title: 'ODN Client',
+          title: 'ODN Connect',
           body: `Disconnected from ${tunnel.name}`
         }).show()
       }
@@ -211,8 +227,8 @@ ipcMain.handle('tunnels:import', async () => {
 
     saveTunnel(tunnel)
     return { success: true, tunnel }
-  } catch (err: any) {
-    return { success: false, error: err.message }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
 
@@ -259,6 +275,162 @@ ipcMain.handle('app:open-config-dir', () => {
   shell.openPath(getConfigDir())
 })
 
+// ─── Service management IPC ──────────────────────────────────────────────────
+
+/** Check if the tunnel service is running and reachable. */
+ipcMain.handle('service:status', async () => {
+  const connected = isServiceConnected()
+  // If not connected, try to reconnect in the background
+  if (!connected) {
+    tryReconnectService().catch(() => {})
+  }
+  return {
+    connected: isServiceConnected(),
+    installed: await isServiceInstalled()
+  }
+})
+
+/** Install the tunnel service (one-time, prompts for elevation). */
+ipcMain.handle('service:install', async () => {
+  const result = await installService()
+  if (result.success) {
+    // Try to connect to the newly installed service
+    await initServiceClient()
+  }
+  return result
+})
+
+/** Uninstall the tunnel service. */
+ipcMain.handle('service:uninstall', async () => {
+  return uninstallService()
+})
+
+// ─── Server IPC ──────────────────────────────────────────────────────────────
+
+/** Fetch server info without authenticating — used to confirm a server URL during onboarding. */
+ipcMain.handle('server:getServerInfo', async (_, url: string) => {
+  return ServerClient.fetchServerInfo(url)
+})
+
+/** Full onboarding: fetch server info, login, persist profile, start sync. */
+ipcMain.handle('server:onboard', async (_, { url, email, password, totpCode }: {
+  url: string; email: string; password: string; totpCode?: string | null
+}) => {
+  try {
+    const info = await ServerClient.fetchServerInfo(url)
+    const tokens = await ServerClient.login(url, email, password, totpCode)
+
+    const profile = {
+      apiBaseUrl: url.replace(/\/$/, ''),
+      serverName: info.server_name,
+      serverPublicKey: info.public_key,
+      serverEndpoint: info.endpoint,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      tokenExpiresAt: Date.now() + tokens.expires_in * 1000
+    }
+    saveServerProfile(profile)
+
+    serverClient = new ServerClient(profile, onAuthExpired)
+    syncManager = new SyncManager(serverClient, getServiceClient)
+    syncManager.start()
+
+    return { success: true, serverName: info.server_name }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+/** Clear tokens, stop sync loop, and invalidate the refresh token on the server. */
+ipcMain.handle('server:logout', async () => {
+  syncManager?.stop()
+  syncManager = null
+  serverClient?.logout().catch(() => {})
+  serverClient = null
+  deleteServerProfile()
+  return { success: true }
+})
+
+/** Return display-only profile info — never tokens. */
+ipcMain.handle('server:getProfile', () => {
+  const p = getServerProfile()
+  if (!p) return null
+  return { serverName: p.serverName, apiBaseUrl: p.apiBaseUrl }
+})
+
+ipcMain.handle('server:getSyncStatus', () => {
+  return syncManager?.getSyncStatus() ?? { lastSyncAt: null, syncing: false, error: null }
+})
+
+ipcMain.handle('server:syncNow', async () => {
+  await syncManager?.syncNow()
+  return { success: true }
+})
+
+/** Self-service peer creation: generate keypair → register with server → write .conf → import. */
+ipcMain.handle('server:createPeer', async () => {
+  if (!serverClient) return { success: false, error: 'Not connected to a server' }
+
+  const profile = getServerProfile()
+  if (!profile) return { success: false, error: 'No server profile found' }
+
+  const keys = generateKeyPair()
+  if (!keys) return { success: false, error: 'Failed to generate WireGuard keypair' }
+
+  const clientLabel =
+    process.platform === 'win32' ? 'odn-connect/win' :
+    process.platform === 'darwin' ? 'odn-connect/mac' : 'odn-connect/linux'
+
+  try {
+    const peer = await serverClient.createPeer({
+      name: os.hostname(),
+      publicKey: keys.publicKey,
+      clientLabel
+    })
+
+    const dnsLine = peer.dns ? `DNS = ${peer.dns}` : ''
+    const pskLine = peer.preshared_key ? `PresharedKey = ${peer.preshared_key}` : ''
+    const confLines = [
+      '[Interface]',
+      `PrivateKey = ${keys.privateKey}`,
+      `Address = ${peer.assigned_ip}/32`,
+      ...(dnsLine ? [dnsLine] : []),
+      '',
+      '[Peer]',
+      `PublicKey = ${profile.serverPublicKey}`,
+      ...(pskLine ? [pskLine] : []),
+      `AllowedIPs = ${peer.allowed_ips}`,
+      `Endpoint = ${profile.serverEndpoint}`,
+      'PersistentKeepalive = 25',
+      ''
+    ]
+    const confContent = confLines.join('\n')
+
+    const configPath = path.join(getConfigDir(), `${peer.name}.conf`)
+    const fs = await import('node:fs')
+    fs.writeFileSync(configPath, confContent, 'utf-8')
+
+    const parsed = parseTunnelConfig(configPath)
+    const tunnel: Tunnel = {
+      id: crypto.randomUUID(),
+      name: peer.name,
+      configPath,
+      address: parsed.address ?? [],
+      dns: parsed.dns ?? [],
+      listenPort: parsed.listenPort,
+      peers: parsed.peers ?? [],
+      connected: false,
+      createdAt: Date.now()
+    }
+    saveTunnel(tunnel)
+    mainWindow && updateTrayMenu(mainWindow)
+
+    return { success: true, tunnelId: tunnel.id }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -267,6 +439,24 @@ app.whenReady().then(async () => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Connect to the tunnel service before creating the window
+  await initServiceClient()
+
+  // Resume server connection + sync if a profile exists from a previous session
+  const existingProfile = getServerProfile()
+  if (existingProfile) {
+    serverClient = new ServerClient(existingProfile, onAuthExpired)
+    syncManager = new SyncManager(serverClient, getServiceClient)
+    syncManager.start()
+  }
+
+  // Periodically attempt to reconnect to the service if it goes down
+  setInterval(() => {
+    if (!isServiceConnected()) {
+      tryReconnectService().catch(() => {})
+    }
+  }, 30_000)
 
   const win = createWindow()
 

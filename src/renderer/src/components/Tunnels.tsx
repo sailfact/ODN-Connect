@@ -8,11 +8,15 @@
  */
 
 import { useState } from 'react'
+import { Trash2, ShieldCheck, Loader2, RefreshCw } from 'lucide-react'
+import ConfirmDialog from './ConfirmDialog'
 import type { Tunnel } from '../types'
 
 interface TunnelsProps {
   tunnels: Tunnel[]
+  wgInstalled: { wg: boolean; wgQuick: boolean } | null
   onRefresh: () => Promise<void>
+  onToast: (message: string, type?: 'success' | 'error' | 'info') => void
 }
 
 /** Displays details for a single WireGuard peer within an expanded tunnel row. */
@@ -22,7 +26,7 @@ function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
       <div
         className={`w-2 h-2 rounded-full mt-1 shrink-0 ${
           peer.latestHandshake && Date.now() / 1000 - peer.latestHandshake < 180
-            ? 'bg-accent-green'
+            ? 'bg-accent-success'
             : 'bg-text-muted'
         }`}
       />
@@ -69,6 +73,7 @@ function PeerRow({ peer }: { peer: Tunnel['peers'][0] }) {
 /** A single tunnel row with expandable peer list, connect/disconnect, and delete actions. */
 function TunnelRow({
   tunnel,
+  wgReady,
   onConnect,
   onDisconnect,
   onDelete,
@@ -76,6 +81,7 @@ function TunnelRow({
   onToggleExpand
 }: {
   tunnel: Tunnel
+  wgReady: boolean
   onConnect: () => Promise<void>
   onDisconnect: () => Promise<void>
   onDelete: () => Promise<void>
@@ -85,6 +91,7 @@ function TunnelRow({
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const handleConnect = async () => {
     setBusy(true)
@@ -111,12 +118,12 @@ function TunnelRow({
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete tunnel "${tunnel.name}"? This cannot be undone.`)) return
     setDeleting(true)
     try {
       await onDelete()
     } finally {
       setDeleting(false)
+      setShowConfirm(false)
     }
   }
 
@@ -126,12 +133,12 @@ function TunnelRow({
     }`}>
       {/* Header row */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <button onClick={onToggleExpand} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-          <div className={`w-3 h-3 rounded-full shrink-0 ${tunnel.connected ? 'bg-accent-green' : 'bg-text-muted'}`} />
+        <button onClick={onToggleExpand} aria-label={expanded ? 'Collapse peer details' : 'Expand peer details'} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <div className={`w-3 h-3 rounded-full shrink-0 ${tunnel.connected ? 'bg-accent-success' : 'bg-text-muted'}`} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-text-primary font-semibold text-sm">{tunnel.name}</span>
-              {tunnel.connected && <span className="badge-connected">Active</span>}
+              {tunnel.connected && <span className="badge-connected">Connected</span>}
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs text-text-secondary">
               {tunnel.address && tunnel.address.length > 0 && (
@@ -151,33 +158,35 @@ function TunnelRow({
             <button
               onClick={handleDisconnect}
               disabled={busy}
-              className="btn-secondary text-accent-red hover:border-red-500/50 disabled:opacity-50"
+              className="btn-secondary text-accent-danger hover:border-red-500/50 disabled:opacity-50"
             >
-              {busy ? '...' : 'Disconnect'}
+              {busy ? <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" />Disconnecting...</> : 'Disconnect'}
             </button>
           ) : (
             <button
               onClick={handleConnect}
-              disabled={busy}
+              disabled={busy || !wgReady}
+              title={!wgReady ? 'WireGuard is not installed' : undefined}
               className="btn-primary disabled:opacity-50"
             >
-              {busy ? '...' : 'Connect'}
+              {busy ? <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" />Connecting...</> : 'Connect'}
             </button>
           )}
           <button
-            onClick={handleDelete}
+            onClick={() => setShowConfirm(true)}
             disabled={deleting || tunnel.connected}
             title={tunnel.connected ? 'Disconnect before deleting' : 'Delete tunnel'}
-            className="p-2 text-text-muted hover:text-accent-red hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-30"
+            aria-label="Delete tunnel"
+            className="p-2 text-text-muted hover:text-accent-danger hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-30"
           >
-            🗑
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mx-4 mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-accent-red">
+        <div className="mx-4 mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-accent-danger">
           {error}
         </div>
       )}
@@ -199,14 +208,26 @@ function TunnelRow({
           No peers configured
         </div>
       )}
+
+      <ConfirmDialog
+        open={showConfirm}
+        title="Delete tunnel"
+        message={`Are you sure you want to delete "${tunnel.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setShowConfirm(false)}
+      />
     </div>
   )
 }
 
-export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
+export default function Tunnels({ tunnels, wgInstalled, onRefresh, onToast }: TunnelsProps) {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const wgReady = !wgInstalled || (wgInstalled.wg && wgInstalled.wgQuick)
 
   const handleImport = async () => {
     setImporting(true)
@@ -219,6 +240,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         return
       }
       await onRefresh()
+      onToast('Tunnel imported', 'success')
     } finally {
       setImporting(false)
     }
@@ -237,18 +259,21 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
     const result = await window.api.connectTunnel(tunnel.id)
     if (!result.success) throw new Error(result.error)
     await onRefresh()
+    onToast(`${tunnel.name} connected`, 'success')
   }
 
   const handleDisconnect = async (tunnel: Tunnel) => {
     const result = await window.api.disconnectTunnel(tunnel.id)
     if (!result.success) throw new Error(result.error)
     await onRefresh()
+    onToast(`${tunnel.name} disconnected`, 'info')
   }
 
   const handleDelete = async (tunnel: Tunnel) => {
     const result = await window.api.deleteTunnel(tunnel.id)
     if (!result.success) throw new Error(result.error)
     await onRefresh()
+    onToast(`${tunnel.name} deleted`, 'info')
   }
 
   return (
@@ -266,8 +291,9 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
             <button
               onClick={onRefresh}
               className="btn-ghost"
+              aria-label="Refresh tunnels"
             >
-              ↺ Refresh
+              <RefreshCw className="w-4 h-4 inline mr-1" /> Refresh
             </button>
             <button
               onClick={handleImport}
@@ -281,7 +307,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
 
         {/* Import error */}
         {importError && (
-          <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-accent-red">
+          <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-accent-danger">
             {importError}
           </div>
         )}
@@ -289,7 +315,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         {/* Tunnel list */}
         {tunnels.length === 0 ? (
           <div className="card text-center py-16">
-            <div className="text-5xl mb-4">🔐</div>
+            <ShieldCheck className="w-12 h-12 text-text-muted mx-auto mb-4" />
             <p className="text-text-primary font-semibold text-lg">No tunnels yet</p>
             <p className="text-text-secondary text-sm mt-2 mb-6 max-w-sm mx-auto">
               Import an existing WireGuard .conf file to add your first tunnel.
@@ -304,7 +330,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
               <ul className="text-text-secondary text-xs space-y-1">
                 <li>• WireGuard config files end in .conf</li>
                 <li>• WireGuard must be installed from wireguard.com/install</li>
-                <li>• Run ODN Client with elevated privileges for tunnel management</li>
+                <li>• Run ODN Connect with elevated privileges for tunnel management</li>
               </ul>
             </div>
           </div>
@@ -314,6 +340,7 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
               <TunnelRow
                 key={tunnel.id}
                 tunnel={tunnel}
+                wgReady={wgReady}
                 onConnect={() => handleConnect(tunnel)}
                 onDisconnect={() => handleDisconnect(tunnel)}
                 onDelete={() => handleDelete(tunnel)}
@@ -325,15 +352,15 @@ export default function Tunnels({ tunnels, onRefresh }: TunnelsProps) {
         )}
 
         {/* Info box */}
-        <div className="mt-6 bg-accent-blue/5 border border-accent-blue/20 rounded-xl p-4 text-xs text-text-secondary">
-          <p className="text-accent-blue font-semibold mb-1">How it works</p>
+        <div className="mt-6 bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-4 text-xs text-text-secondary">
+          <p className="text-accent-primary font-semibold mb-1">How it works</p>
           <p>
-            ODN Client uses WireGuard to manage tunnels. Configs are stored in your
+            ODN Connect uses WireGuard to manage tunnels. Configs are stored in your
             application data directory.
           </p>
           <button
             onClick={() => window.api.openConfigDir()}
-            className="text-accent-blue hover:underline mt-1 inline-block"
+            className="text-accent-primary hover:underline mt-1 inline-block"
           >
             Open config directory →
           </button>

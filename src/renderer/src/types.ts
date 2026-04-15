@@ -40,8 +40,27 @@ export interface AppSettings {
   launchAtStartup: boolean
   minimizeToTray: boolean
   showNotifications: boolean
-  theme: 'dark' | 'light' | 'system'
+  theme: 'midnight' | 'arctic-light' | 'slate-dusk' | 'nord-frost' | 'system'
 }
 
-/** The three navigable views in the application. */
-export type Route = 'dashboard' | 'tunnels' | 'settings'
+/** Status of the elevated tunnel service. */
+export interface ServiceStatus {
+  connected: boolean
+  installed: boolean
+}
+
+/** Display-only server profile — no tokens, safe to pass to renderer. */
+export interface ServerProfile {
+  serverName: string
+  apiBaseUrl: string
+}
+
+/** Sync loop status, polled from the main process. */
+export interface SyncStatus {
+  lastSyncAt: number | null
+  syncing: boolean
+  error: string | null
+}
+
+/** The navigable views in the application. */
+export type Route = 'dashboard' | 'tunnels' | 'settings' | 'onboarding'

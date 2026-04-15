@@ -6,14 +6,14 @@
  */
 
 import Store from 'electron-store'
-import type { AppStore, AppSettings, Tunnel } from './types'
+import type { AppStore, AppSettings, Tunnel, ServerProfile } from './types'
 
 /** Default settings applied on first launch. */
 const defaultSettings: AppSettings = {
   launchAtStartup: false,
   minimizeToTray: true,
   showNotifications: true,
-  theme: 'dark'
+  theme: 'midnight'
 }
 
 const store = new Store<AppStore>({
@@ -23,7 +23,8 @@ const store = new Store<AppStore>({
   },
   schema: {
     tunnels: { type: 'array' },
-    settings: { type: 'object' }
+    settings: { type: 'object' },
+    serverProfile: { type: 'object' }
   }
 })
 
@@ -56,6 +57,18 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   store.set('settings', settings)
+}
+
+export function getServerProfile(): ServerProfile | undefined {
+  return store.get('serverProfile') as ServerProfile | undefined
+}
+
+export function saveServerProfile(profile: ServerProfile): void {
+  store.set('serverProfile', profile)
+}
+
+export function deleteServerProfile(): void {
+  store.delete('serverProfile')
 }
 
 /** Updates a tunnel's connection state and records the last-connected timestamp. */
