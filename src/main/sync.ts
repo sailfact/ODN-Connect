@@ -9,13 +9,36 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
-import { getConfigDir, parseTunnelConfig } from './wireguard'
+import { getConfigDir, parseTunnelConfig, sanitizeTunnelName } from './wireguard'
 import { getTunnels, saveTunnel, deleteTunnel } from './store'
 import type { ServerClient } from './server-client'
 import type { TunnelServiceClient } from '../service/client'
 import type { SyncStatus, Tunnel } from './types'
 
 const SYNC_INTERVAL_MS = 30_000
+
+const PRIVATE_KEY_RE = /^[ \t]*PrivateKey[ \t]*=[ \t]*(.+)$/m
+
+function extractPrivateKey(conf: string): string | null {
+  const match = conf.match(PRIVATE_KEY_RE)
+  return match ? match[1].trim() : null
+}
+
+/**
+ * Self-service peers keep their private key on this device — the server never
+ * sees it, so the .conf it serves has no PrivateKey line. Re-inject the key
+ * from the existing local file so a sync never breaks a working tunnel.
+ */
+function withLocalPrivateKey(newConf: string, configPath: string): string {
+  if (extractPrivateKey(newConf)) return newConf
+  if (!fs.existsSync(configPath)) return newConf
+  const localKey = extractPrivateKey(fs.readFileSync(configPath, 'utf-8'))
+  if (!localKey) return newConf
+  return newConf.replace(
+    /^[ \t]*\[Interface\][ \t]*$/m,
+    `[Interface]\nPrivateKey = ${localKey}`
+  )
+}
 
 export class SyncManager {
   private status: SyncStatus = { lastSyncAt: null, syncing: false, error: null }
@@ -51,46 +74,50 @@ export class SyncManager {
 
     try {
       const peers = await this.client.getPeers()
-      const serverNames = new Set(peers.map((p) => p.name))
+      const serverNames = new Set(peers.map((p) => sanitizeTunnelName(p.name)))
       const configDir = getConfigDir()
 
       // Fetch/update configs for each server peer
       for (const peer of peers) {
-        const configPath = path.join(configDir, `${peer.name}.conf`)
+        const tunnelName = sanitizeTunnelName(peer.name)
+        const configPath = path.join(configDir, `${tunnelName}.conf`)
         const result = await this.client.getPeerConfig(peer.id, this.lastModified.get(peer.id))
 
         if (result.status === 200) {
-          // Write updated config to disk
-          fs.writeFileSync(configPath, result.body, 'utf-8')
+          // Write updated config to disk, keeping a locally held private key
+          fs.writeFileSync(configPath, withLocalPrivateKey(result.body, configPath), 'utf-8')
           this.lastModified.set(peer.id, result.lastModified)
 
-          // Add to store if not already present
+          // Add to store if not already present; mark as server-owned either way
           const existing = getTunnels().find((t) => t.configPath === configPath)
           if (!existing) {
             const parsed = parseTunnelConfig(configPath)
             const tunnel: Tunnel = {
               id: crypto.randomUUID(),
-              name: peer.name,
+              name: tunnelName,
               configPath,
               address: parsed.address ?? [],
               dns: parsed.dns ?? [],
               listenPort: parsed.listenPort,
               peers: parsed.peers ?? [],
               connected: false,
-              createdAt: Date.now()
+              createdAt: Date.now(),
+              source: 'server'
             }
             saveTunnel(tunnel)
+          } else if (existing.source !== 'server') {
+            saveTunnel({ ...existing, source: 'server' })
           }
 
           // If this tunnel is currently active, apply the new config live
           const serviceClient = this.getServiceClient()
           if (serviceClient) {
             const activeInterfaces = await serviceClient.getActiveInterfaces()
-            if (activeInterfaces.includes(peer.name)) {
-              const syncResult = await serviceClient.syncConf(peer.name, configPath)
+            if (activeInterfaces.includes(tunnelName)) {
+              const syncResult = await serviceClient.syncConf(tunnelName, configPath)
               if (!syncResult.success) {
-                console.error(`syncconf failed for ${peer.name}:`, syncResult.error)
-                this.status.error = `Config updated but live sync failed for ${peer.name} — reconnect to apply`
+                console.error(`syncconf failed for ${tunnelName}:`, syncResult.error)
+                this.status.error = `Config updated but live sync failed for ${tunnelName} — reconnect to apply`
               }
             }
           }
@@ -98,21 +125,16 @@ export class SyncManager {
         // status 304 — config unchanged, nothing to do
       }
 
-      // Remove .conf files for peers deleted on the server
-      const confFiles = fs.readdirSync(configDir).filter((f) => f.endsWith('.conf'))
-      for (const file of confFiles) {
-        const name = file.replace(/\.conf$/, '')
-        if (!serverNames.has(name)) {
-          const configPath = path.join(configDir, file)
-          try {
-            fs.unlinkSync(configPath)
-          } catch (err) {
-            console.error(`Failed to remove stale config ${file}:`, err)
-          }
-          // Remove from store by configPath
-          const tunnel = getTunnels().find((t) => t.configPath === configPath)
-          if (tunnel) deleteTunnel(tunnel.id)
+      // Remove server-owned tunnels whose peer was deleted on the server.
+      // Locally imported tunnels are never touched by the sync loop.
+      for (const tunnel of getTunnels()) {
+        if (tunnel.source !== 'server' || serverNames.has(tunnel.name)) continue
+        try {
+          fs.unlinkSync(tunnel.configPath)
+        } catch (err) {
+          console.error(`Failed to remove stale config ${tunnel.configPath}:`, err)
         }
+        deleteTunnel(tunnel.id)
       }
 
       this.status.lastSyncAt = Date.now()

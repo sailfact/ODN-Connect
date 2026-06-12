@@ -24,6 +24,7 @@ import {
   formatBytes,
   formatHandshake,
   getConfigDir,
+  sanitizeTunnelName,
   initServiceClient,
   isServiceConnected,
   getServiceClient,
@@ -207,7 +208,7 @@ ipcMain.handle('tunnels:import', async () => {
 
   const sourcePath = result.filePaths[0]
   const baseName = path.basename(sourcePath, '.conf')
-  const tunnelName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const tunnelName = sanitizeTunnelName(baseName)
 
   try {
     const configPath = importConfigFile(sourcePath, tunnelName)
@@ -222,7 +223,8 @@ ipcMain.handle('tunnels:import', async () => {
       listenPort: parsed.listenPort,
       peers: parsed.peers || [],
       connected: false,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      source: 'local'
     }
 
     saveTunnel(tunnel)
@@ -406,21 +408,24 @@ ipcMain.handle('server:createPeer', async () => {
     ]
     const confContent = confLines.join('\n')
 
-    const configPath = path.join(getConfigDir(), `${peer.name}.conf`)
+    // Hostname-derived names may contain dots etc. — sanitize for file/interface use
+    const tunnelName = sanitizeTunnelName(peer.name)
+    const configPath = path.join(getConfigDir(), `${tunnelName}.conf`)
     const fs = await import('node:fs')
     fs.writeFileSync(configPath, confContent, 'utf-8')
 
     const parsed = parseTunnelConfig(configPath)
     const tunnel: Tunnel = {
       id: crypto.randomUUID(),
-      name: peer.name,
+      name: tunnelName,
       configPath,
       address: parsed.address ?? [],
       dns: parsed.dns ?? [],
       listenPort: parsed.listenPort,
       peers: parsed.peers ?? [],
       connected: false,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      source: 'server'
     }
     saveTunnel(tunnel)
     mainWindow && updateTrayMenu(mainWindow)

@@ -343,6 +343,15 @@ export function parseTunnelConfig(configPath: string): Partial<Tunnel> {
   }
 }
 
+/**
+ * Sanitize a tunnel name for use as a .conf filename and WireGuard interface name.
+ * Applied to user-picked filenames on import and to peer names received from an
+ * ODN VPN Server (which are not guaranteed to be filesystem-safe).
+ */
+export function sanitizeTunnelName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
 export function importConfigFile(sourcePath: string, tunnelName: string): string {
   const configDir = getConfigDir()
   const destPath = path.join(configDir, `${tunnelName}.conf`)

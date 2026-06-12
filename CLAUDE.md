@@ -125,7 +125,7 @@ POST {apiBaseUrl}/api/auth/login
 
 POST {apiBaseUrl}/api/auth/refresh
   body: { refresh_token }
-  response: { access_token, expires_in }
+  response: { access_token, refresh_token, expires_in }   # refresh tokens rotate
 ```
 
 Token refresh should happen proactively (e.g. when `tokenExpiresAt - now < 120s`)
@@ -157,8 +157,9 @@ Runs on a 30-second interval when server-connected:
       If 304 (not modified): skip
    c. If the active tunnel's config changed: call wg syncconf via Tunnel Service
 
-3. Remove any .conf files in config-dir not present in server peer list
-   (peer was deleted on server)
+3. Remove server-synced tunnels (Tunnel.source === 'server') not present in the
+   server peer list (peer was deleted on server). Locally imported tunnels are
+   never removed by the sync loop.
 ```
 
 Expose sync state to the renderer via `window.api.getSyncStatus()`:

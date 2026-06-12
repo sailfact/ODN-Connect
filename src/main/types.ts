@@ -48,6 +48,13 @@ export interface Tunnel {
   createdAt: number
   /** Timestamp (ms) of the last successful connection. */
   lastConnected?: number
+  /**
+   * Where this tunnel came from. 'server' tunnels are owned by the sync loop
+   * (overwritten/removed to match the server peer list); 'local' (or absent,
+   * for tunnels imported before this field existed) are user-managed and the
+   * sync loop never touches them.
+   */
+  source?: 'server' | 'local'
 }
 
 /** Wrapper for the `wg show all dump` result. */
