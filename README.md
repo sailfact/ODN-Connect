@@ -1,6 +1,6 @@
-# ODN Connect
+# WG Client
 
-A modern WireGuard desktop client — your own Tailscale.
+A modern WireGuard desktop client.
 
 ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tunnels without needing to use the command line. It wraps the native WireGuard CLI tools with a modern Electron-based UI.
 
@@ -33,7 +33,7 @@ ODN Connect provides a clean, intuitive interface for managing WireGuard VPN tun
 
 ### From Installer
 
-Download the latest release for your platform from the [Releases](https://github.com/sailfact/ODN-Connect/releases) page:
+Download the latest release for your platform from the [Releases](https://github.com/sailfact/WG-Client/releases) page:
 
 - **Windows:** `odn-client-<version>-setup.exe` (NSIS installer, requires Administrator)
 - **macOS:** `ODN-Client-<version>.dmg` (supports Intel and Apple Silicon)
@@ -43,8 +43,8 @@ Download the latest release for your platform from the [Releases](https://github
 
 ```bash
 # Clone the repository
-git clone https://github.com/sailfact/ODN-Connect.git
-cd ODN-Connect
+git clone https://github.com/sailfact/WG-Client.git
+cd WG-Client
 
 # Install dependencies
 npm install
@@ -64,7 +64,7 @@ npm run package:linux  # Linux (.AppImage, .deb)
 ## Usage
 
 1. **Install WireGuard** for your platform (see Prerequisites above)
-2. **Run ODN Connect** with elevated privileges
+2. **Run WG Client** with elevated privileges
 3. **Import a tunnel** — Go to Tunnels > Import .conf and select your WireGuard configuration file
 4. **Connect** — Click the Connect button on any tunnel card
 5. **Monitor** — The Dashboard shows real-time stats; the system tray icon reflects connection status
@@ -75,9 +75,9 @@ Tunnel configuration files are stored in a platform-specific location:
 
 | Platform | Path |
 |----------|------|
-| Windows | `%APPDATA%\odn-client\tunnels\` |
-| macOS | `~/Library/Application Support/odn-client/tunnels/` |
-| Linux | `~/.config/odn-client/tunnels/` |
+| Windows | `%APPDATA%\wg-client\tunnels\` |
+| macOS | `~/Library/Application Support/wg-client/tunnels/` |
+| Linux | `~/.config/wg-client/tunnels/` |
 
 Application settings (launch at startup, tray behavior, etc.) are persisted via Electron Store.
 
