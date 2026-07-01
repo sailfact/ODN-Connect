@@ -14,9 +14,6 @@ import type { WireGuardInterface, WireGuardStatus } from '../main/types'
 /** Default timeout for service requests (ms). */
 const REQUEST_TIMEOUT = 10_000
 
-/** Max reconnection attempts before giving up. */
-const MAX_RECONNECT_ATTEMPTS = 5
-
 export class TunnelServiceClient {
   private socket: net.Socket | null = null
   private buffer = ''
@@ -26,31 +23,32 @@ export class TunnelServiceClient {
     timer: ReturnType<typeof setTimeout>
   }>()
   private connected = false
-  private reconnectAttempts = 0
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** Connect to the tunnel service. Resolves when connected or rejects after max retries. */
-  async connect(): Promise<void> {
-    if (this.connected) return
+  // ponytail: no in-client reconnect — the main process re-inits the client on a
+  // 30s health poll (tryReconnectService), so a second backoff loop here is dead weight.
+  /** Connect to the tunnel service. Resolves on connect, rejects on error. */
+  connect(): Promise<void> {
+    if (this.connected) return Promise.resolve()
     return new Promise((resolve, reject) => {
-      this.attemptConnect(resolve, reject)
+      this.socket = net.createConnection(SERVICE_PIPE_PATH)
+
+      this.socket.on('connect', () => {
+        this.connected = true
+        this.buffer = ''
+        resolve()
+      })
+
+      this.socket.on('error', () => {
+        this.connected = false
+        reject(new Error('Failed to connect to tunnel service'))
+      })
+
+      this.attachHandlers(this.socket)
     })
   }
 
-  private attemptConnect(
-    resolve: () => void,
-    reject: (err: Error) => void
-  ): void {
-    this.socket = net.createConnection(SERVICE_PIPE_PATH)
-
-    this.socket.on('connect', () => {
-      this.connected = true
-      this.reconnectAttempts = 0
-      this.buffer = ''
-      resolve()
-    })
-
-    this.socket.on('data', (chunk) => {
+  private attachHandlers(socket: net.Socket): void {
+    socket.on('data', (chunk) => {
       this.buffer += chunk.toString()
       const lines = this.buffer.split('\n')
       this.buffer = lines.pop() || ''
@@ -71,7 +69,7 @@ export class TunnelServiceClient {
       }
     })
 
-    this.socket.on('close', () => {
+    socket.on('close', () => {
       this.connected = false
       // Reject all pending requests
       for (const [id, pending] of this.pendingRequests) {
@@ -81,26 +79,15 @@ export class TunnelServiceClient {
       }
     })
 
-    this.socket.on('error', () => {
+    // Post-connect errors: mark disconnected. 'close' follows and rejects pending
+    // requests; the main-process health poll re-inits the client.
+    socket.on('error', () => {
       this.connected = false
-      this.reconnectAttempts++
-      if (this.reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-        const delay = Math.min(100 * Math.pow(2, this.reconnectAttempts - 1), 5000)
-        this.reconnectTimer = setTimeout(() => {
-          this.attemptConnect(resolve, reject)
-        }, delay)
-      } else {
-        reject(new Error('Failed to connect to tunnel service after max retries'))
-      }
     })
   }
 
   /** Disconnect from the service. */
   disconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
-    }
     if (this.socket) {
       this.socket.destroy()
       this.socket = null
@@ -116,19 +103,6 @@ export class TunnelServiceClient {
   /** Whether the client is currently connected to the service. */
   isConnected(): boolean {
     return this.connected
-  }
-
-  /** Check if the service is reachable by sending a ping. */
-  async isServiceRunning(): Promise<boolean> {
-    try {
-      if (!this.connected) {
-        await this.connect()
-      }
-      const res = await this.send('ping')
-      return res.success
-    } catch {
-      return false
-    }
   }
 
   /** Send a request and wait for a correlated response. */

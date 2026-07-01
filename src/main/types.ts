@@ -24,9 +24,6 @@ export interface WireGuardInterface {
   name: string
   publicKey: string
   listenPort?: number
-  privateKey?: string
-  address?: string[]
-  dns?: string[]
   peers: WireGuardPeer[]
 }
 

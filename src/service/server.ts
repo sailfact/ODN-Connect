@@ -18,6 +18,7 @@ import { promisify } from 'util'
 import type { ServiceRequest, ServiceResponse } from './protocol'
 import { SERVICE_PIPE_PATH } from './protocol'
 import { getConfigDirPath } from '../shared/config-dir'
+import { parseWgDump } from '../shared/wg-dump'
 
 const execFileAsync = promisify(execFile)
 const platform = process.platform
@@ -127,40 +128,8 @@ function handleInterfaces(): string[] {
 function handleStatus(): unknown {
   try {
     const cmd = platform === 'win32' ? `"${wgCli}" show all dump` : `${wgCli} show all dump`
-    const output = execSync(cmd, { stdio: 'pipe' }).toString().trim()
-    if (!output) return { interfaces: [] }
-
-    const interfaces: Record<string, { name: string; publicKey: string; listenPort?: number; peers: unknown[] }> = {}
-
-    for (const line of output.split('\n')) {
-      const parts = line.split('\t')
-      if (parts.length === 5) {
-        const [name, , publicKey, listenPort] = parts
-        interfaces[name] = {
-          name,
-          publicKey,
-          listenPort: listenPort !== 'off' ? parseInt(listenPort) : undefined,
-          peers: []
-        }
-      } else if (parts.length === 9) {
-        const [iface, pubkey, preshared, endpoint, allowedIPs, latestHandshake, rx, tx, keepalive] = parts
-        const ifc = interfaces[iface]
-        if (ifc) {
-          ifc.peers.push({
-            publicKey: pubkey,
-            presharedKey: preshared !== '(none)' ? preshared : undefined,
-            endpoint: endpoint !== '(none)' ? endpoint : undefined,
-            allowedIPs: allowedIPs.split(',').map((s) => s.trim()),
-            latestHandshake: latestHandshake !== '0' ? parseInt(latestHandshake) : undefined,
-            rxBytes: parseInt(rx) || 0,
-            txBytes: parseInt(tx) || 0,
-            persistentKeepalive: keepalive !== 'off' ? parseInt(keepalive) : undefined
-          })
-        }
-      }
-    }
-
-    return { interfaces: Object.values(interfaces) }
+    const output = execSync(cmd, { stdio: 'pipe' }).toString()
+    return { interfaces: parseWgDump(output) }
   } catch {
     return { interfaces: [] }
   }
